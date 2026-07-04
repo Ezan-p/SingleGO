@@ -1,0 +1,210 @@
+.room-page {
+  min-height: 100vh;
+  padding: 40rpx 60rpx;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(ellipse at 50% 0%, #5C3A1E 0%, #3D2410 55%, #2A1808 100%);
+  color: #F0E4D0;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 60rpx;
+}
+
+.title {
+  display: block;
+  font-size: 56rpx;
+  font-weight: bold;
+  color: #E8B870;
+  margin-bottom: 16rpx;
+  letter-spacing: 6rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.5);
+}
+
+.subtitle {
+  display: block;
+  font-size: 28rpx;
+  color: rgba(232, 184, 112, 0.7);
+  letter-spacing: 3rpx;
+}
+
+.card-wood {
+  background: rgba(58, 38, 20, 0.6);
+  border: 1px solid rgba(232, 184, 112, 0.25);
+  border-radius: 20rpx;
+  padding: 48rpx 40rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.4);
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.size-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 36rpx;
+}
+
+.size-label {
+  font-size: 30rpx;
+  color: #D8C8A8;
+}
+
+.picker-value {
+  font-size: 30rpx;
+  color: #E8B870;
+  padding: 8rpx 24rpx;
+  border: 1px solid rgba(232, 184, 112, 0.4);
+  border-radius: 12rpx;
+}
+
+.home-btn {
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  font-size: 32rpx;
+  border-radius: 48rpx;
+  margin-top: 24rpx;
+  text-align: center;
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, #C8923C 0%, #8B5A2B 100%);
+  color: #FFF8E8;
+  border: none;
+  letter-spacing: 4rpx;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #E8B870;
+  border: 1px solid rgba(232, 184, 112, 0.6);
+  letter-spacing: 4rpx;
+}
+
+.card-title {
+  display: block;
+  font-size: 34rpx;
+  color: #E8B870;
+  margin-bottom: 30rpx;
+  text-align: center;
+  letter-spacing: 4rpx;
+}
+
+.room-input {
+  width: 100%;
+  height: 96rpx;
+  font-size: 48rpx;
+  letter-spacing: 16rpx;
+  text-align: center;
+  color: #E8B870;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(232, 184, 112, 0.4);
+  border-radius: 16rpx;
+  margin-bottom: 12rpx;
+  box-sizing: border-box;
+}
+
+.room-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.card-label {
+  font-size: 26rpx;
+  color: rgba(232, 184, 112, 0.7);
+  letter-spacing: 4rpx;
+  margin-bottom: 16rpx;
+}
+
+.room-code {
+  font-size: 80rpx;
+  letter-spacing: 12rpx;
+  color: #E8B870;
+  font-weight: bold;
+  text-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.6);
+  margin-bottom: 36rpx;
+}
+
+.players {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.player {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.player-name {
+  font-size: 28rpx;
+  color: #D8C8A8;
+  max-width: 200rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-tag {
+  font-size: 22rpx;
+  color: rgba(232, 184, 112, 0.6);
+}
+
+.vs {
+  font-size: 28rpx;
+  color: rgba(232, 184, 112, 0.5);
+  margin: 0 16rpx;
+}
+
+.stone-dot {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  margin-bottom: 8rpx;
+}
+
+.dot-black {
+  background: radial-gradient(circle at 35% 30%, #4a4a4a, #000);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.6);
+}
+
+.dot-white {
+  background: radial-gradient(circle at 35% 30%, #fff, #c8c0b0);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.4);
+}
+
+.dot-empty {
+  background: transparent;
+  border: 2rpx dashed rgba(232, 184, 112, 0.4);
+}
+
+.tip-text {
+  font-size: 26rpx;
+  color: rgba(232, 184, 112, 0.7);
+  text-align: center;
+  margin-bottom: 12rpx;
+  letter-spacing: 2rpx;
+}
+
+.tip-ready {
+  color: #E8B870;
+}
+
+.err-text {
+  margin-top: 24rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: #E57373;
+}

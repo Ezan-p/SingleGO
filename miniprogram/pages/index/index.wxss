@@ -1,0 +1,122 @@
+.container {
+  min-height: 100vh;
+  padding: 40rpx 60rpx;
+  display: flex;
+  flex-direction: column;
+  /* 深色木色背景：由深至浅的沉稳渐变，营造棋类对弈氛围 */
+  background:
+    radial-gradient(ellipse at 50% 0%, #5C3A1E 0%, #3D2410 55%, #2A1808 100%);
+  color: #F0E4D0;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 80rpx;
+}
+
+.title {
+  display: block;
+  font-size: 60rpx;
+  font-weight: bold;
+  /* 暖色木金标题，柔光阴影 */
+  color: #E8B870;
+  margin-bottom: 20rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.5);
+  letter-spacing: 8rpx;
+}
+
+.subtitle {
+  display: block;
+  font-size: 30rpx;
+  /* 淡米色副标题，沉稳低调 */
+  color: rgba(232, 184, 112, 0.7);
+  font-weight: 300;
+  letter-spacing: 4rpx;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 60rpx;
+}
+
+/* 卡片：半透明深木色 + 细金边，与背景融合而不突兀 */
+.start-card {
+  background: rgba(58, 38, 20, 0.6);
+  border: 1px solid rgba(232, 184, 112, 0.25);
+  padding: 48rpx 40rpx;
+  border-radius: 20rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.start-desc {
+  display: block;
+  font-size: 28rpx;
+  color: #D8C8A8;
+  line-height: 1.7;
+  margin-bottom: 36rpx;
+  text-align: center;
+}
+
+.start-btn {
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  font-size: 34rpx;
+  border-radius: 48rpx;
+  margin: 0;
+  /* 按钮用木金渐变，呼应棋盘色调 */
+  background: linear-gradient(135deg, #C8923C 0%, #8B5A2B 100%);
+  color: #FFF8E8;
+  border: none;
+  letter-spacing: 4rpx;
+}
+
+/* 好友对战：金边描边次按钮，与主按钮形成主次 */
+.online-btn {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: 30rpx;
+  border-radius: 44rpx;
+  margin-top: 24rpx;
+  background: transparent;
+  color: #E8B870;
+  border: 1px solid rgba(232, 184, 112, 0.6);
+  letter-spacing: 4rpx;
+}
+
+.features {
+  background: rgba(58, 38, 20, 0.6);
+  border: 1px solid rgba(232, 184, 112, 0.25);
+  padding: 40rpx;
+  border-radius: 20rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.4);
+}
+
+.features-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #E8B870;
+  margin-bottom: 30rpx;
+  letter-spacing: 2rpx;
+}
+
+.feature-item {
+  font-size: 30rpx;
+  color: #D8C8A8;
+  margin-bottom: 20rpx;
+  padding-left: 20rpx;
+  line-height: 1.6;
+}
+
+.footer {
+  text-align: center;
+  margin-top: 60rpx;
+  padding-top: 40rpx;
+}

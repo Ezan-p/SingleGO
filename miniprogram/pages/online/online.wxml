@@ -1,0 +1,60 @@
+<view class="online-page">
+  <!-- 对手信息条 -->
+  <view class="players-bar">
+    <view class="player-side">
+      <view class="stone-dot {{myColor === 1 ? 'dot-black' : 'dot-white'}}"></view>
+      <view class="player-info">
+        <text class="player-name">{{myColor === 1 ? (host.nickname || '黑棋') : (guest.nickname || '白棋')}}</text>
+        <text class="player-tag">你 · {{myColor === 1 ? '黑' : '白'}}</text>
+      </view>
+    </view>
+    <view class="vs-text">VS</view>
+    <view class="player-side">
+      <view class="player-info player-info-right">
+        <text class="player-name">{{myColor === 1 ? (guest.nickname || '白棋') : (host.nickname || '黑棋')}}</text>
+        <text class="player-tag">{{myColor === 1 ? '白' : '黑'}} · 对手</text>
+      </view>
+      <view class="stone-dot {{myColor === 1 ? 'dot-white' : 'dot-black'}}"></view>
+    </view>
+  </view>
+
+  <!-- 状态栏 -->
+  <view class="status-bar">
+    <view class="player-indicator">
+      <view class="stone-dot {{currentPlayer === 1 ? 'dot-black' : 'dot-white'}}"></view>
+      <text class="status-text" wx:if="{{!gameOver}}">{{isMyTurn ? '你的回合' : '对手回合'}}</text>
+      <text class="status-text" wx:else>{{winner === myColor ? '你胜' : '对手胜'}}</text>
+    </view>
+    <text class="move-count">第 {{moveCount}} 手</text>
+  </view>
+
+  <!-- 棋盘 -->
+  <view class="board-wrapper" style="width:{{boardPx}}px;height:{{boardPx}}px;padding:{{halfCellPx}}px;">
+    <view class="board-grid" style="width:{{gridPx}}px;height:{{gridPx}}px;background-size:{{cellPx}}px {{cellPx}}px;background-position:{{halfCellPx}}px {{halfCellPx}}px;">
+      <view
+        wx:for="{{cells}}"
+        wx:key="key"
+        class="cell"
+        style="width:{{cellPx}}px;height:{{cellPx}}px;"
+        data-r="{{item.r}}"
+        data-c="{{item.c}}"
+        bindtap="onCellTap">
+        <view wx:if="{{item.isStar}}" class="star-dot"></view>
+        <view wx:if="{{item.v === 1}}" class="stone stone-black"></view>
+        <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
+        <view wx:if="{{item.isLast}}" class="last-marker"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 结果横幅 -->
+  <view class="result-banner" wx:if="{{gameOver}}">
+    <text class="result-title">{{winner === 1 ? '黑棋胜利' : '白棋胜利'}}</text>
+    <text class="result-reason">{{winReason}}</text>
+  </view>
+
+  <!-- 控制按钮 -->
+  <view class="controls">
+    <view class="btn btn-leave ctrl-btn" bindtap="onLeave">离开对局</view>
+  </view>
+</view>

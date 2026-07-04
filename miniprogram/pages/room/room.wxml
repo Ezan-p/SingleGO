@@ -1,0 +1,73 @@
+<view class="room-page">
+  <view class="header">
+    <text class="title">好友对战</text>
+    <text class="subtitle">创建房间或输入房号加入</text>
+  </view>
+
+  <!-- 模式：home -->
+  <block wx:if="{{mode === 'home'}}">
+    <view class="card-wood home-card">
+      <view class="size-row">
+        <text class="size-label">棋盘</text>
+        <picker mode="selector" range="{{sizeOptions}}" value="{{sizeIndex}}" bindchange="onSizeChange">
+          <view class="picker-value">{{sizeOptions[sizeIndex]}}</view>
+        </picker>
+      </view>
+      <view class="btn btn-gold home-btn" bindtap="onCreateRoom">{{busy ? '创建中...' : '创建房间'}}</view>
+      <view class="btn btn-outline home-btn" bindtap="onShowJoin">加入房间</view>
+    </view>
+  </block>
+
+  <!-- 模式：joining -->
+  <block wx:if="{{mode === 'joining'}}">
+    <view class="card-wood home-card">
+      <text class="card-title">输入房号</text>
+      <input class="room-input" type="text" maxlength="6" value="{{inputRoomId}}" placeholder="6 位房号" bindinput="onInputRoomId" />
+      <view class="btn btn-gold home-btn" bindtap="onJoinConfirm">{{busy ? '加入中...' : '确认加入'}}</view>
+      <view class="btn btn-outline home-btn" bindtap="onCancelJoin">取消</view>
+    </view>
+  </block>
+
+  <!-- 模式：created / ready / joined -->
+  <block wx:if="{{mode === 'created' || mode === 'ready' || mode === 'joined'}}">
+    <view class="card-wood room-card">
+      <text class="card-label">房间号</text>
+      <text class="room-code">{{roomId}}</text>
+      <view class="players">
+        <view class="player">
+          <view class="stone-dot dot-black"></view>
+          <text class="player-name">{{host.nickname || '房主'}}</text>
+          <text class="player-tag">房主·黑</text>
+        </view>
+        <view class="vs">VS</view>
+        <view class="player">
+          <view class="stone-dot {{guest ? 'dot-white' : 'dot-empty'}}"></view>
+          <text class="player-name">{{guest ? guest.nickname : '等待对手...'}}</text>
+          <text class="player-tag">{{guest ? '客人·白' : ''}}</text>
+        </view>
+      </view>
+
+      <!-- 房主：未就绪显示分享提示 -->
+      <block wx:if="{{mode === 'created'}}">
+        <text class="tip-text">分享给好友或让对方输入房号加入</text>
+        <button class="btn btn-gold home-btn" open-type="share">分享邀请</button>
+        <view class="btn btn-outline home-btn" bindtap="onLeave">解散房间</view>
+      </block>
+
+      <!-- 房主：双方就绪 -->
+      <block wx:if="{{mode === 'ready'}}">
+        <text class="tip-text tip-ready">对手已就绪</text>
+        <view class="btn btn-gold home-btn" bindtap="onStartGame">{{busy ? '开始中...' : '开始对局'}}</view>
+        <view class="btn btn-outline home-btn" bindtap="onLeave">解散房间</view>
+      </block>
+
+      <!-- 客人：已加入等待 -->
+      <block wx:if="{{mode === 'joined'}}">
+        <text class="tip-text">等待房主开始对局...</text>
+        <view class="btn btn-outline home-btn" bindtap="onLeave">离开房间</view>
+      </block>
+    </view>
+  </block>
+
+  <view class="err-text" wx:if="{{errMsg}}">{{errMsg}}</view>
+</view>

@@ -1,0 +1,26 @@
+<view class="container">
+  <view class="header">
+    <text class="title">单围棋</text>
+    <text class="subtitle">原创双人棋类对弈</text>
+  </view>
+
+  <view class="content">
+    <view class="start-card">
+      <text class="start-desc">黑方先手，双方轮流落子。围住对方棋子即可获胜，但小心自包围与连续两排判负。</text>
+      <view class="btn btn-primary start-btn" bindtap="onStartGame">开始游戏</view>
+      <view class="btn online-btn" bindtap="onFriendBattle">好友对战</view>
+    </view>
+
+    <view class="features">
+      <text class="features-title">游戏规则</text>
+      <view class="feature-item">· 十字围 / 斜角围 — 围住对方棋子获胜</view>
+      <view class="feature-item">· 八方全占 — 自包围判负</view>
+      <view class="feature-item">· 连续两排 — 相邻两排超过四颗判负</view>
+      <view class="feature-item">· 判负优先于胜利</view>
+    </view>
+  </view>
+  
+  <view class="footer">
+    <cloudbase-badge show-text="{{true}}" />
+  </view>
+</view>

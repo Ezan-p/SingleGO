@@ -1,0 +1,285 @@
+.game-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background-color: var(--background);
+}
+
+/* 状态栏 */
+.status-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--white);
+  border-radius: 16rpx;
+  padding: 24rpx 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+
+.player-indicator {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.stone-dot {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  margin-right: 16rpx;
+}
+
+.dot-black {
+  background: radial-gradient(circle at 30% 30%, #666 0%, #000 100%);
+  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
+}
+
+.dot-white {
+  background: radial-gradient(circle at 30% 30%, #fff 0%, #ddd 100%);
+  border: 1px solid #999;
+  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.15);
+}
+
+.status-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.move-count {
+  font-size: 28rpx;
+  color: var(--light-text);
+}
+
+/* 棋盘 */
+.board-wrapper {
+  margin: 0 auto 24rpx;
+  border: 8rpx solid #7A5230;
+  border-radius: 10rpx;
+  box-shadow:
+    0 10rpx 28rpx rgba(0, 0, 0, 0.28),
+    0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  box-sizing: border-box;
+  background: radial-gradient(circle at 50% 50%, #F0C478 0%, #DCA558 100%);
+  position: relative;
+}
+
+/* 网格层：用 flex-wrap 铺设交叉点单元格，背景 linear-gradient 画网格线 */
+.board-grid {
+  display: flex;
+  flex-wrap: wrap;
+  background-image:
+    linear-gradient(to right, #3a2f1f 1px, transparent 1px),
+    linear-gradient(to bottom, #3a2f1f 1px, transparent 1px);
+  /* background-size 与 background-position 由内联样式按 cellPx 动态设置 */
+}
+
+/* 单个交叉点单元格 */
+.cell {
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* 星位 */
+.star-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16%;
+  height: 16%;
+  border-radius: 50%;
+  background-color: #3a2f1f;
+  z-index: 1;
+}
+
+/* 棋子 */
+.stone {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  height: 90%;
+  border-radius: 50%;
+  z-index: 2;
+}
+
+.stone-black {
+  background: radial-gradient(circle at 30% 30%, #666666 0%, #000000 100%);
+  box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.stone-white {
+  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #dddddd 100%);
+  border: 1px solid #999999;
+  box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* 最后一手高亮环 */
+.last-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 96%;
+  height: 96%;
+  border-radius: 50%;
+  border: 3px solid #1E88E5;
+  box-sizing: border-box;
+  z-index: 3;
+}
+
+/* 结果横幅 */
+.result-banner {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 4rpx 16rpx rgba(30, 136, 229, 0.3);
+}
+
+.result-title {
+  color: #fff;
+  font-size: 40rpx;
+  font-weight: bold;
+  margin-bottom: 8rpx;
+}
+
+.result-reason {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 26rpx;
+}
+
+/* 控制按钮 */
+.controls {
+  display: flex;
+  flex-direction: row;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+}
+
+.ctrl-btn {
+  flex: 1;
+  margin: 0;
+}
+
+.ctrl-btn-disabled {
+  opacity: 0.45;
+}
+
+/* 棋盘尺寸选择 */
+.size-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--white);
+  border-radius: 16rpx;
+  padding: 20rpx 32rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+
+.size-label {
+  font-size: 28rpx;
+  color: var(--light-text);
+  margin-right: 20rpx;
+}
+
+.picker-value {
+  color: var(--primary-color);
+  font-size: 30rpx;
+  font-weight: 500;
+  padding: 6rpx 24rpx;
+  background-color: rgba(30, 136, 229, 0.1);
+  border-radius: 24rpx;
+}
+
+/* 规则弹窗 */
+.rules-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
+.rules-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.rules-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #fff;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 40rpx 40rpx 60rpx 40rpx;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.rules-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.rules-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: var(--text-color);
+}
+
+.rules-close {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.rules-scroll {
+  max-height: 60vh;
+}
+
+.rules-section {
+  margin-bottom: 28rpx;
+}
+
+.rules-section-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 12rpx;
+}
+
+.rules-text {
+  display: block;
+  font-size: 26rpx;
+  color: var(--text-color);
+  line-height: 42rpx;
+  margin-bottom: 6rpx;
+}
+
+.rules-emphasis {
+  color: #d32f2f;
+  font-weight: 600;
+  margin-top: 8rpx;
+}

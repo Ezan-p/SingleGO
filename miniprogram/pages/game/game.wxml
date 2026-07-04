@@ -1,0 +1,92 @@
+<view class="game-page">
+  <!-- 状态栏 -->
+  <view class="status-bar">
+    <view class="player-indicator">
+      <view class="stone-dot {{currentPlayer === 1 ? 'dot-black' : 'dot-white'}}"></view>
+      <text class="status-text" wx:if="{{!gameOver}}">{{currentPlayer === 1 ? '黑棋回合' : '白棋回合'}}</text>
+      <text class="status-text" wx:else>{{winner === 1 ? '黑棋胜' : '白棋胜'}}</text>
+    </view>
+    <text class="move-count">第 {{moveCount}} 手</text>
+  </view>
+
+  <!-- 棋盘 -->
+  <view class="board-wrapper" style="width:{{boardPx}}px;height:{{boardPx}}px;padding:{{halfCellPx}}px;">
+    <view class="board-grid" style="width:{{gridPx}}px;height:{{gridPx}}px;background-size:{{cellPx}}px {{cellPx}}px;background-position:{{halfCellPx}}px {{halfCellPx}}px;">
+      <view
+        wx:for="{{cells}}"
+        wx:key="key"
+        class="cell"
+        style="width:{{cellPx}}px;height:{{cellPx}}px;"
+        data-r="{{item.r}}"
+        data-c="{{item.c}}"
+        bindtap="onCellTap">
+        <view wx:if="{{item.isStar}}" class="star-dot"></view>
+        <view wx:if="{{item.v === 1}}" class="stone stone-black"></view>
+        <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
+        <view wx:if="{{item.isLast}}" class="last-marker"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 结果横幅 -->
+  <view class="result-banner" wx:if="{{gameOver}}">
+    <text class="result-title">{{winner === 1 ? '黑棋胜利' : '白棋胜利'}}</text>
+    <text class="result-reason">{{winReason}}</text>
+  </view>
+
+  <!-- 控制按钮 -->
+  <view class="controls">
+    <view class="btn btn-primary ctrl-btn" bindtap="onNewGame">新游戏</view>
+    <view class="btn btn-secondary ctrl-btn {{(!canUndo || gameOver) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋</view>
+    <view class="btn btn-secondary ctrl-btn" bindtap="onToggleRules">规则</view>
+  </view>
+
+  <!-- 棋盘尺寸选择 -->
+  <view class="size-row">
+    <text class="size-label">棋盘</text>
+    <picker mode="selector" range="{{sizeOptions}}" value="{{sizeIndex}}" bindchange="onSizeChange">
+      <view class="picker-value">{{sizeOptions[sizeIndex]}}</view>
+    </picker>
+  </view>
+
+  <!-- 规则弹窗 -->
+  <view class="rules-modal" wx:if="{{showRules}}">
+    <view class="rules-backdrop" bindtap="onToggleRules"></view>
+    <view class="rules-panel">
+      <view class="rules-header">
+        <text class="rules-title">单围棋规则</text>
+        <image class="rules-close" src="/images/icons/close.png" bindtap="onToggleRules"></image>
+      </view>
+      <scroll-view scroll-y class="rules-scroll">
+        <view class="rules-section">
+          <text class="rules-section-title">基础规则</text>
+          <text class="rules-text">· 黑方先手，双方轮流在棋盘交叉点落子。</text>
+          <text class="rules-text">· 每回合只能落下一枚棋子，落子后不可移动或移除。</text>
+          <text class="rules-text">· 对局结束后禁止继续落子。</text>
+        </view>
+
+        <view class="rules-section">
+          <text class="rules-section-title">胜利规则（围子）</text>
+          <text class="rules-text">落子后若围住对方任意一颗棋子，立即获胜：</text>
+          <text class="rules-text">· 十字围：对方棋子的东南西北四个相邻位置全部为当前玩家棋子。</text>
+          <text class="rules-text">· 斜角围：对方棋子的东北、东南、西南、西北四个对角位置全部为当前玩家棋子。</text>
+        </view>
+
+        <view class="rules-section">
+          <text class="rules-section-title">判负规则</text>
+          <text class="rules-text">· 八方全占：当前玩家某颗内部棋子的八个相邻位置全部为自己的棋子，立即判负（边缘棋子不计）。</text>
+          <text class="rules-text">· 连续两排：当前玩家形成两条相邻的横向、竖向或斜向连续棋子，每条数量均大于 4，且位置对齐，立即判负。</text>
+        </view>
+
+        <view class="rules-section">
+          <text class="rules-section-title">判定顺序</text>
+          <text class="rules-text">1. 检测八方全占判负</text>
+          <text class="rules-text">2. 检测连续两排判负</text>
+          <text class="rules-text">3. 检测围子胜利</text>
+          <text class="rules-text">4. 否则继续游戏</text>
+          <text class="rules-text rules-emphasis">判负规则优先于胜利规则。</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>
