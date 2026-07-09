@@ -1,6 +1,8 @@
 // AI 对战页
 const dango = require('../../utils/dango.js');
 const ai = require('../../utils/ai.js');
+const undoManager = require('../../utils/undo-manager.js');
+const rewardedAd = require('../../utils/rewarded-ad.js');
 
 const DIFFICULTY_NAMES = {
   easy: '简单',
@@ -18,6 +20,10 @@ Page({
     winReason: '',
     moveCount: 0,
     canUndo: false,
+    undoCount: 1, // 悔棋次数
+    showUndoAdModal: false, // 是否显示广告提示弹窗
+    showMockAd: false, // 是否显示模拟广告弹窗
+    mockAdCountdown: 3, // 模拟广告倒计时
     lastMove: null,
     sizeOptions: ['13×13', '15×15', '19×19'],
     sizeIndex: 1,
@@ -43,7 +49,7 @@ Page({
   },
 
   // 非响应式
-  // this.board / this.history / this.starSet / this.aiTimer / this.startTime
+  // this.board / this.history / this.starSet / this.aiTimer / this.startTime / this._pendingUndo
 
   onLoad: function (options) {
     let size = dango.DEFAULT_SIZE;
@@ -73,6 +79,8 @@ Page({
       humanPlayer: humanPlayer,
       aiPlayer: aiPlayer
     });
+    // 初始化广告
+    rewardedAd.init();
     this.initGame(size);
 
     // 若 AI 执黑（先手），AI 先下
@@ -91,6 +99,8 @@ Page({
   initGame: function (size) {
     this.board = dango.createBoard(size);
     this.history = [];
+    // 初始化悔棋次数
+    undoManager.init(1);
     const stars = dango.starPoints(size);
     this.starSet = {};
     for (let i = 0; i < stars.length; i++) {
@@ -110,6 +120,8 @@ Page({
       winReason: '',
       moveCount: 0,
       canUndo: false,
+      undoCount: undoManager.getCount(),
+      showUndoAdModal: false,
       lastMove: null,
       cellPx: cellPx,
       halfCellPx: halfCellPx,
@@ -286,6 +298,27 @@ Page({
     this.onBackHome();
   },
 
+  // 结果弹窗中的悔棋按钮
+  onResultUndo: function () {
+    if (!this.data.canUndo) return;
+
+    // 关闭结果弹窗
+    this.setData({ showResult: false });
+
+    // 检查悔棋次数
+    if (undoManager.getCount() > 0) {
+      // 有悔棋次数，执行悔棋
+      this._pendingUndo = true;
+      this.executeUndo();
+      undoManager.consume();
+      this.setData({ undoCount: undoManager.getCount() });
+    } else {
+      // 没有悔棋次数，显示广告弹窗
+      this._pendingUndo = true;
+      this.setData({ showUndoAdModal: true });
+    }
+  },
+
   onNewGame: function () {
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
     this.initGame(this.data.boardSize);
@@ -296,8 +329,26 @@ Page({
 
   // 悔棋：撤销双方各一步（共2步），回到玩家回合
   onUndo: function () {
-    if (!this.data.canUndo || this.data.gameOver) return;
+    if (!this.data.canUndo) return;
     if (this.data.aiThinking) return;
+    if (this.history.length === 0) return;
+
+    // 检查悔棋次数
+    if (undoManager.getCount() > 0) {
+      // 有悔棋次数，执行悔棋
+      this._pendingUndo = true;
+      this.executeUndo();
+      undoManager.consume();
+      this.setData({ undoCount: undoManager.getCount() });
+    } else {
+      // 没有悔棋次数，显示广告弹窗
+      this._pendingUndo = true;
+      this.setData({ showUndoAdModal: true });
+    }
+  },
+
+  // 执行悔棋操作
+  executeUndo: function () {
     if (this.history.length === 0) return;
 
     const self = this;
@@ -312,6 +363,9 @@ Page({
       const idx = last.r * size + last.c;
       updates['cells[' + idx + '].v'] = dango.EMPTY;
       updates['cells[' + idx + '].isLast'] = false;
+      // 清除胜利标记
+      updates['cells[' + idx + '].isWinTarget'] = false;
+      updates['cells[' + idx + '].isWinStone'] = false;
     };
 
     // 撤销最近一手（AI 或玩家）
@@ -335,7 +389,56 @@ Page({
       updates.pendingMove = null;
       updates['cells[' + (this.data.pendingMove.r * size + this.data.pendingMove.c) + '].isPending'] = false;
     }
+
+    // 如果游戏已结束，悔棋后恢复游戏状态
+    if (this.data.gameOver) {
+      updates.gameOver = false;
+      updates.winner = 0;
+      updates.winReason = '';
+      updates.showResult = false;
+    }
+
     this.setData(updates);
+  },
+
+  // 点击观看广告
+  onWatchAd: function () {
+    const self = this;
+    this.setData({ showUndoAdModal: false });
+
+    // 显示模拟广告弹窗
+    this.setData({ showMockAd: true, mockAdCountdown: 3 });
+
+    // 倒计时
+    let countdown = 3;
+    const timer = setInterval(() => {
+      countdown--;
+      if (countdown > 0) {
+        self.setData({ mockAdCountdown: countdown });
+      } else {
+        clearInterval(timer);
+        self.setData({ showMockAd: false, mockAdCountdown: 3 });
+
+        // 完整观看广告，奖励悔棋次数
+        undoManager.add(1);
+        wx.showToast({ title: '已获得 1 次悔棋机会', icon: 'success', duration: 1500 });
+
+        // 自动执行悔棋
+        if (self._pendingUndo) {
+          self.executeUndo();
+          self._pendingUndo = false;
+        }
+
+        // 更新悔棋次数显示
+        self.setData({ undoCount: undoManager.getCount() });
+      }
+    }, 1000);
+  },
+
+  // 取消观看广告
+  onCancelAd: function () {
+    this._pendingUndo = false;
+    this.setData({ showUndoAdModal: false });
   },
 
   onSizeChange: function (e) {

@@ -49,7 +49,7 @@
 
   <!-- 控制按钮 -->
   <view class="controls">
-    <view class="btn btn-secondary ctrl-btn {{(!canUndo || gameOver || aiThinking) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋</view>
+    <view class="btn btn-secondary ctrl-btn {{(!canUndo || aiThinking) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋（{{undoCount}}）</view>
     <view class="btn btn-primary ctrl-btn" bindtap="onNewGame">重新开始</view>
     <view class="btn btn-secondary ctrl-btn" bindtap="onBackHome">返回首页</view>
   </view>
@@ -89,9 +89,37 @@
         <text class="info-label">失败原因</text>
         <text class="result-reason-text">{{resultReason}}</text>
       </view>
-      <view class="result-actions">
+      <!-- 获胜时的按钮 -->
+      <view wx:if="{{resultWon}}" class="result-actions">
         <view class="btn btn-secondary result-btn" bindtap="onResultHome">返回首页</view>
         <view class="btn btn-primary result-btn" bindtap="onResultReplay">再来一局</view>
+      </view>
+      <!-- 失败时的按钮（包含悔棋） -->
+      <view wx:else class="result-actions result-actions-three">
+        <view class="btn btn-secondary result-btn" bindtap="onResultHome">返回首页</view>
+        <view class="btn btn-secondary result-btn" bindtap="onResultUndo">悔棋（{{undoCount}}）</view>
+        <view class="btn btn-primary result-btn" bindtap="onResultReplay">再来一局</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 模拟广告弹窗 -->
+  <view class="mock-ad-modal" wx:if="{{showMockAd}}">
+    <view class="mock-ad-content">
+      <text class="mock-ad-title">广告播放中...</text>
+      <text class="mock-ad-countdown">{{mockAdCountdown}}</text>
+    </view>
+  </view>
+
+  <!-- 悔棋广告提示弹窗 -->
+  <view class="undo-ad-modal" wx:if="{{showUndoAdModal}}">
+    <view class="undo-ad-backdrop" bindtap="onCancelAd"></view>
+    <view class="undo-ad-panel">
+      <text class="undo-ad-title">悔棋次数已用完</text>
+      <text class="undo-ad-desc">观看完整视频广告，可立即获得一次悔棋机会。</text>
+      <view class="undo-ad-actions">
+        <view class="btn btn-secondary undo-ad-btn" bindtap="onCancelAd">取消</view>
+        <view class="btn btn-primary undo-ad-btn" bindtap="onWatchAd">观看广告</view>
       </view>
     </view>
   </view>

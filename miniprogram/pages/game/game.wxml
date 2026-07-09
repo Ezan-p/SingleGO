@@ -34,12 +34,15 @@
   <view class="result-banner" wx:if="{{gameOver}}">
     <text class="result-title">{{winner === 1 ? '黑棋胜利' : '白棋胜利'}}</text>
     <text class="result-reason">{{winReason}}</text>
+    <view class="result-banner-actions" wx:if="{{canUndo}}">
+      <view class="btn btn-secondary result-undo-btn" bindtap="onUndo">悔棋（{{undoCount}}）</view>
+    </view>
   </view>
 
   <!-- 控制按钮 -->
   <view class="controls">
     <view class="btn btn-primary ctrl-btn" bindtap="onNewGame">新游戏</view>
-    <view class="btn btn-secondary ctrl-btn {{(!canUndo || gameOver) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋</view>
+    <view class="btn btn-secondary ctrl-btn {{!canUndo ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋（{{undoCount}}）</view>
     <view class="btn btn-secondary ctrl-btn" bindtap="onToggleRules">规则</view>
   </view>
 
@@ -90,6 +93,27 @@
           <text class="rules-text rules-emphasis">判负规则优先于胜利规则。</text>
         </view>
       </scroll-view>
+    </view>
+  </view>
+
+  <!-- 模拟广告弹窗 -->
+  <view class="mock-ad-modal" wx:if="{{showMockAd}}">
+    <view class="mock-ad-content">
+      <text class="mock-ad-title">广告播放中...</text>
+      <text class="mock-ad-countdown">{{mockAdCountdown}}</text>
+    </view>
+  </view>
+
+  <!-- 悔棋广告提示弹窗 -->
+  <view class="undo-ad-modal" wx:if="{{showUndoAdModal}}">
+    <view class="undo-ad-backdrop" bindtap="onCancelAd"></view>
+    <view class="undo-ad-panel">
+      <text class="undo-ad-title">悔棋次数已用完</text>
+      <text class="undo-ad-desc">观看完整视频广告，可立即获得一次悔棋机会。</text>
+      <view class="undo-ad-actions">
+        <view class="btn btn-secondary undo-ad-btn" bindtap="onCancelAd">取消</view>
+        <view class="btn btn-primary undo-ad-btn" bindtap="onWatchAd">观看广告</view>
+      </view>
     </view>
   </view>
 </view>

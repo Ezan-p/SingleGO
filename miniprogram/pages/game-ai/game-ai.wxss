@@ -402,6 +402,10 @@
   gap: 20rpx;
 }
 
+.result-actions-three {
+  gap: 12rpx;
+}
+
 .result-btn {
   flex: 1;
   margin: 0;
@@ -410,3 +414,104 @@
   font-size: 30rpx;
   border-radius: 44rpx;
 }
+
+.result-actions-three .result-btn {
+  font-size: 28rpx;
+}
+
+/* 悔棋广告提示弹窗 */
+.undo-ad-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.undo-ad-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.undo-ad-panel {
+  position: relative;
+  background-color: #fff;
+  border-radius: 24rpx;
+  padding: 48rpx 40rpx 40rpx 40rpx;
+  width: 580rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.2);
+}
+
+.undo-ad-title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: var(--text-color);
+  margin-bottom: 24rpx;
+}
+
+.undo-ad-desc {
+  font-size: 28rpx;
+  color: var(--light-text);
+  text-align: center;
+  line-height: 40rpx;
+  margin-bottom: 36rpx;
+}
+
+.undo-ad-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 24rpx;
+  width: 100%;
+}
+
+.undo-ad-btn {
+  flex: 1;
+}
+
+/* 模拟广告弹窗 */
+.mock-ad-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.mock-ad-content {
+  background-color: #fff;
+  border-radius: 24rpx;
+  padding: 60rpx 100rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.3);
+}
+
+.mock-ad-title {
+  font-size: 32rpx;
+  color: var(--light-text);
+  margin-bottom: 30rpx;
+}
+
+.mock-ad-countdown {
+  font-size: 80rpx;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
