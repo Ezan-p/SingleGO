@@ -70,12 +70,13 @@
           <text class="rules-text">落子后若围住对方任意一颗棋子，立即获胜：</text>
           <text class="rules-text">· 十字围：对方棋子的东南西北四个相邻位置全部为当前玩家棋子。</text>
           <text class="rules-text">· 斜角围：对方棋子的东北、东南、西南、西北四个对角位置全部为当前玩家棋子。</text>
+          <text class="rules-text">· 边缘规则：目标棋子位于棋盘边缘或角落时，越界方向视为已被棋盘边界阻挡，只需用己方棋子补齐棋盘内方向即可围住。</text>
         </view>
 
         <view class="rules-section">
           <text class="rules-section-title">判负规则</text>
           <text class="rules-text">· 八方全占：当前玩家某颗内部棋子的八个相邻位置全部为自己的棋子，立即判负（边缘棋子不计）。</text>
-          <text class="rules-text">· 连续两排：当前玩家形成两条相邻的横向、竖向或斜向连续棋子，每条数量均大于 4，且位置对齐，立即判负。</text>
+          <text class="rules-text">· 连续两排：当前玩家形成两条相邻的横向、竖向或斜向连续棋子，每条数量均大于 3，且位置对齐，立即判负。</text>
         </view>
 
         <view class="rules-section">

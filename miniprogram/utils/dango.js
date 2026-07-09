@@ -80,13 +80,14 @@ function checkSelfSurroundLoss(board, player) {
   return false;
 }
 
-// 检查 (r,c) 的指定方向集合是否全部在界内且全部为 player 棋子
+// 检查 (r,c) 的指定方向集合是否满足围住条件
+// 越界方向视为已满足（棋盘边界视为天然阻挡），棋盘内方向必须是 player 棋子
 function allNeighborsAre(board, r, c, dirs, player) {
   const size = board.length;
   for (let i = 0; i < dirs.length; i++) {
     const dr = dirs[i][0], dc = dirs[i][1];
     const nr = r + dr, nc = c + dc;
-    if (!inBounds(nr, nc, size)) return false;
+    if (!inBounds(nr, nc, size)) continue; // 越界方向视为已满足
     if (board[nr][nc] !== player) return false;
   }
   return true;
@@ -145,7 +146,7 @@ function getDiagonalUpRight(board, k) {
   return line;
 }
 
-// 找出线上长度 ≥ 5 的连续 player 段
+// 找出线上长度 ≥ 4 的连续 player 段
 // 返回每段 {r1,c1,r2,c2, cells, cellSet}：
 //   r1,c1,r2,c2 — 起点与终点坐标（横/竖向区间判定用）
 //   cells       — 段内所有坐标 [{r,c},...]（按线方向递增）
@@ -158,13 +159,13 @@ function findRuns(line, player) {
       if (start === -1) start = i;
     } else {
       if (start !== -1) {
-        if (i - start >= 5) runs.push(makeRun(line, start, i - 1));
+        if (i - start >= 4) runs.push(makeRun(line, start, i - 1));
         start = -1;
       }
     }
   }
   if (start !== -1) {
-    if (line.length - start >= 5) runs.push(makeRun(line, start, line.length - 1));
+    if (line.length - start >= 4) runs.push(makeRun(line, start, line.length - 1));
   }
   return runs;
 }
@@ -187,7 +188,7 @@ function rangesOverlap(lo1, hi1, lo2, hi2) {
 
 // 斜向双排判负核心：run a 的所有坐标按 (dr,dc) 平移后是否恰好等于 run b
 // （长度相同且 a+(dr,dc) ⊆ b），即两条平行斜向链逐子一一对应、整体长度一致。
-// 长度 ≥5 由 findRuns 保证；偏移 (dr,dc) 为对角方向（西南 (1,-1) 或东南 (1,1)），
+// 长度 ≥4 由 findRuns 保证；偏移 (dr,dc) 为对角方向（西南 (1,-1) 或东南 (1,1)），
 // 对应棋子距离恰为 1 个对角步。
 function chainDiagMatch(a, b, dr, dc) {
   if (a.cells.length !== b.cells.length) return false;
@@ -198,11 +199,11 @@ function chainDiagMatch(a, b, dr, dc) {
   return true;
 }
 
-// 规则四：连续两排超过四颗判负
-//   横向 — 相邻两行各自 >4 连续段，列区间任意重叠
-//   竖向 — 相邻两列各自 >4 连续段，行区间任意重叠
-//   ↘   — 两条平行 ↘ 对角线（r-c 相差 2）各自 >4 连续段，偏移 (1,-1) 西南方向逐子一一对应
-//   ↙   — 两条平行 ↙ 对角线（r+c 相差 2）各自 >4 连续段，偏移 (1,1) 东南方向逐子一一对应
+// 规则四：连续两排超过三颗判负
+//   横向 — 相邻两行各自 >3 连续段，列区间任意重叠
+//   竖向 — 相邻两列各自 >3 连续段，行区间任意重叠
+//   ↘   — 两条平行 ↘ 对角线（r-c 相差 2）各自 >3 连续段，偏移 (1,-1) 西南方向逐子一一对应
+//   ↙   — 两条平行 ↙ 对角线（r+c 相差 2）各自 >3 连续段，偏移 (1,1) 东南方向逐子一一对应
 //   说明：斜向对应指每颗棋子在对角方向（东北/东南/西南/西北）上有对应棋子，距离 1 步；
 //         两条链方向相同、平行且逐子对应，长度一致，无断点、错位或局部重叠。
 function checkConsecutiveRowsLoss(board, player) {
@@ -273,7 +274,7 @@ function evaluateMove(board, lastR, lastC, player) {
     if (rowResult.direction === 'h') dirText = '相邻横行';
     else if (rowResult.direction === 'v') dirText = '相邻竖列';
     else dirText = '相邻斜行';
-    return { gameOver: true, winner: opponent(player), reason: dirText + '连续超过四颗', rule: 4 };
+    return { gameOver: true, winner: opponent(player), reason: dirText + '连续超过三颗', rule: 4 };
   }
   const win = checkSurroundWin(board, player);
   if (win) {

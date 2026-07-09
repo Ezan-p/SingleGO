@@ -15,7 +15,7 @@
       <text class="features-title">游戏规则</text>
       <view class="feature-item">· 十字围 / 斜角围 — 围住对方棋子获胜</view>
       <view class="feature-item">· 八方全占 — 自包围判负</view>
-      <view class="feature-item">· 连续两排 — 相邻两排超过四颗判负</view>
+      <view class="feature-item">· 连续两排 — 相邻两排超过三颗判负</view>
       <view class="feature-item">· 判负优先于胜利</view>
     </view>
   </view>
