@@ -1,0 +1,46 @@
+<view class="setup-page">
+  <view class="setup-header">
+    <text class="setup-title">系统对战</text>
+    <text class="setup-subtitle">选择AI难度与执棋色</text>
+  </view>
+
+  <view class="section">
+    <text class="section-title">AI 难度</text>
+    <view class="diff-list">
+      <view
+        wx:for="{{difficulties}}"
+        wx:key="key"
+        class="diff-card {{difficultyIndex === index ? 'diff-card-active' : ''}}"
+        data-idx="{{index}}"
+        bindtap="onSelectDifficulty">
+        <view class="diff-card-top">
+          <text class="diff-name">{{item.name}}</text>
+          <view class="diff-check" wx:if="{{difficultyIndex === index}}">✓</view>
+        </view>
+        <text class="diff-desc">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <text class="section-title">执棋色</text>
+    <view class="color-row">
+      <view
+        class="color-card {{selectedColor === 'black' ? 'color-card-active' : ''}}"
+        data-color="black"
+        bindtap="onSelectColor">
+        <view class="color-stone color-black"></view>
+        <text class="color-label">执黑（先手）</text>
+      </view>
+      <view
+        class="color-card {{selectedColor === 'white' ? 'color-card-active' : ''}}"
+        data-color="white"
+        bindtap="onSelectColor">
+        <view class="color-stone color-white"></view>
+        <text class="color-label">执白（后手）</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="btn btn-primary start-btn" bindtap="onStart">开始对局</view>
+</view>

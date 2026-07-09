@@ -1,0 +1,234 @@
+.rules-page {
+  min-height: 100vh;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background-color: var(--background);
+}
+
+/* 总览卡片 */
+.overview-card {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  border-radius: 16rpx;
+  padding: 36rpx 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(30, 136, 229, 0.25);
+}
+
+.overview-title {
+  display: block;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 24rpx;
+  text-align: center;
+}
+
+.overview-cols {
+  display: flex;
+  flex-direction: row;
+  gap: 24rpx;
+}
+
+.overview-col {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12rpx;
+  padding: 20rpx 24rpx;
+}
+
+.overview-subtitle {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 12rpx;
+}
+
+.overview-bad {
+  color: #FFD2D2;
+}
+
+.overview-item {
+  display: block;
+  font-size: 25rpx;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 44rpx;
+}
+
+/* 纯文字卡片 */
+.text-card {
+  background-color: var(--white);
+  border-radius: 16rpx;
+  padding: 36rpx 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+
+.text-card-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 16rpx;
+}
+
+.text-line {
+  display: block;
+  font-size: 27rpx;
+  color: var(--text-color);
+  line-height: 46rpx;
+  margin-bottom: 6rpx;
+}
+
+.text-emphasis {
+  color: #d32f2f;
+  font-weight: 600;
+  margin-top: 12rpx;
+}
+
+/* 示意图卡片 */
+.diagram-card {
+  background-color: var(--white);
+  border-radius: 16rpx;
+  padding: 32rpx 32rpx 36rpx 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.06);
+}
+
+.diag-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 24rpx;
+  text-align: center;
+}
+
+/* 示意图舞台：居中放置棋盘，留出边界条空间 */
+.diag-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40rpx;
+  margin-bottom: 24rpx;
+  background-color: #FAFAFA;
+  border-radius: 12rpx;
+}
+
+/* 边界灰色条：表示棋盘外区域 */
+.boundary-strip {
+  position: absolute;
+  background-color: rgba(120, 120, 120, 0.25);
+  border: 1px dashed rgba(120, 120, 120, 0.6);
+}
+
+/* 棋盘网格 */
+.diag-grid {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  background-color: #EBB96B;
+  background-image:
+    linear-gradient(to right, #3a2f1f 1px, transparent 1px),
+    linear-gradient(to bottom, #3a2f1f 1px, transparent 1px);
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+}
+
+.diag-cell {
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* 示意图棋子 */
+.dstone {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 84%;
+  height: 84%;
+  border-radius: 50%;
+  z-index: 2;
+}
+
+.dstone-black {
+  background: radial-gradient(circle at 30% 30%, #666 0%, #000 100%);
+  box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.dstone-white {
+  background: radial-gradient(circle at 30% 30%, #fff 0%, #ddd 100%);
+  border: 1px solid #999;
+  box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* 红圈标注 */
+.mark-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 104%;
+  height: 104%;
+  border-radius: 50%;
+  border: 3px solid #E53935;
+  box-sizing: border-box;
+  z-index: 3;
+}
+
+/* 红色叉号 */
+.mark-x {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  height: 90%;
+  z-index: 4;
+}
+
+.x-line {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120%;
+  height: 4px;
+  background-color: #E53935;
+  border-radius: 2px;
+}
+
+.x-line-1 {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.x-line-2 {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+/* 区域红框 */
+.mark-box {
+  position: absolute;
+  border: 3px solid #E53935;
+  border-radius: 6rpx;
+  z-index: 5;
+  box-sizing: border-box;
+}
+
+.diag-desc {
+  display: block;
+  font-size: 27rpx;
+  color: var(--text-color);
+  line-height: 44rpx;
+  text-align: center;
+  padding: 0 8rpx;
+}
+
+.back-btn {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: 32rpx;
+  border-radius: 44rpx;
+  margin-top: 8rpx;
+}

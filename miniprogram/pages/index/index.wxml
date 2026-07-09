@@ -8,7 +8,10 @@
     <view class="start-card">
       <text class="start-desc">黑方先手，双方轮流落子。围住对方棋子即可获胜，但小心自包围与连续两排判负。</text>
       <view class="btn btn-primary start-btn" bindtap="onStartGame">开始游戏</view>
-      <view class="btn online-btn" bindtap="onFriendBattle">好友对战</view>
+      <view class="btn btn-primary start-btn" bindtap="onFriendBattle">好友对战</view>
+      <view class="btn btn-primary start-btn" bindtap="onAIBattle">系统对战</view>
+      <view class="btn btn-primary start-btn" bindtap="onRules">规则说明</view>
+      <view class="btn btn-primary start-btn" bindtap="onSettings">设置</view>
     </view>
 
     <view class="features">

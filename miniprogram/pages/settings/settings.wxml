@@ -1,0 +1,26 @@
+<view class="settings-page">
+  <view class="settings-card">
+    <view class="setting-row">
+      <text class="setting-label">默认棋盘尺寸</text>
+      <picker mode="selector" range="{{sizeOptions}}" value="{{sizeIndex}}" bindchange="onSizeChange">
+        <view class="setting-value">{{sizeOptions[sizeIndex]}}</view>
+      </picker>
+    </view>
+
+    <view class="setting-divider"></view>
+
+    <view class="setting-row">
+      <text class="setting-label">音效</text>
+      <switch checked="{{soundOn}}" bindchange="onToggleSound" color="#1E88E5"/>
+    </view>
+
+    <view class="setting-divider"></view>
+
+    <view class="setting-row">
+      <text class="setting-label">振动</text>
+      <switch checked="{{vibrateOn}}" bindchange="onToggleVibrate" color="#1E88E5"/>
+    </view>
+  </view>
+
+  <view class="btn btn-primary back-btn" bindtap="onBack">返回</view>
+</view>

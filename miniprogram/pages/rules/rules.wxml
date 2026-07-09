@@ -1,0 +1,65 @@
+<view class="rules-page">
+  <!-- 规则总览 -->
+  <view class="overview-card">
+    <text class="overview-title">规则总览</text>
+    <view class="overview-cols">
+      <view class="overview-col">
+        <text class="overview-subtitle">✅ 获胜</text>
+        <text class="overview-item">十字围</text>
+        <text class="overview-item">斜角围</text>
+        <text class="overview-item">边缘十字围</text>
+        <text class="overview-item">边缘斜角围</text>
+      </view>
+      <view class="overview-col">
+        <text class="overview-subtitle overview-bad">❌ 判负</text>
+        <text class="overview-item">八方全占</text>
+        <text class="overview-item">横向双排超过三颗</text>
+        <text class="overview-item">竖向双排超过三颗</text>
+        <text class="overview-item">斜向双排超过三颗</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 基础规则 -->
+  <view class="text-card">
+    <text class="text-card-title">基础规则</text>
+    <text class="text-line">· 棋盘默认 15×15，可切换 13×13 或 19×19。</text>
+    <text class="text-line">· 黑方先手，双方轮流在棋盘交叉点落子。</text>
+    <text class="text-line">· 每回合只能落下一枚棋子，落子后不可移动或移除。</text>
+    <text class="text-line">· 对局结束后禁止继续落子。</text>
+    <text class="text-line text-emphasis">判负规则优先于胜利规则。</text>
+  </view>
+
+  <!-- 示意图列表 -->
+  <view class="diagram-card" wx:for="{{diagrams}}" wx:key="title" wx:for-item="diag">
+    <text class="diag-title">{{diag.title}}</text>
+    <view class="diag-stage">
+      <!-- 棋盘网格 -->
+      <view class="diag-grid" style="{{diag.gridStyle}}{{diag.bgSize}}">
+        <!-- 边界灰色条：相对棋盘定位 -->
+        <block wx:if="{{diag.hasBoundary}}">
+          <view wx:for="{{diag.boundaries}}" wx:key="side" wx:for-item="bd" class="boundary-strip" style="{{bd.style}}"></view>
+        </block>
+        <view
+          wx:for="{{diag.cells}}"
+          wx:key="key"
+          wx:for-item="cell"
+          class="diag-cell"
+          style="{{diag.cellStyle}}">
+          <view wx:if="{{cell.stone === 1}}" class="dstone dstone-black"></view>
+          <view wx:elif="{{cell.stone === 2}}" class="dstone dstone-white"></view>
+          <view wx:if="{{cell.mark === 'circle'}}" class="mark-circle"></view>
+          <view wx:if="{{cell.mark === 'x'}}" class="mark-x">
+            <view class="x-line x-line-1"></view>
+            <view class="x-line x-line-2"></view>
+          </view>
+        </view>
+        <!-- 区域红框 -->
+        <view wx:if="{{diag.boxStyle}}" class="mark-box" style="{{diag.boxStyle}}"></view>
+      </view>
+    </view>
+    <text class="diag-desc">{{diag.desc}}</text>
+  </view>
+
+  <view class="btn btn-primary back-btn" bindtap="onBack">返回</view>
+</view>

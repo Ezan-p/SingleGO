@@ -3,7 +3,11 @@
     "pages/index/index",
     "pages/room/room",
     "pages/online/online",
-    "pages/game/game"
+    "pages/game/game",
+    "pages/ai-setup/ai-setup",
+    "pages/game-ai/game-ai",
+    "pages/rules/rules",
+    "pages/settings/settings"
   ],
   "window": {
     "backgroundTextStyle": "light",

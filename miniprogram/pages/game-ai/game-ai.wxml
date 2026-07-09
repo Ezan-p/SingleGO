@@ -1,0 +1,62 @@
+<view class="game-page">
+  <!-- 状态栏 -->
+  <view class="status-bar">
+    <view class="player-indicator">
+      <view class="stone-dot {{currentPlayer === 1 ? 'dot-black' : 'dot-white'}}"></view>
+      <text class="status-text" wx:if="{{!gameOver && currentPlayer === humanPlayer}}">你的回合</text>
+      <text class="status-text" wx:elif="{{!gameOver}}">AI回合</text>
+      <text class="status-text" wx:else>{{winner === humanPlayer ? '你胜了' : 'AI胜'}}</text>
+    </view>
+    <text class="move-count">第 {{moveCount}} 手</text>
+  </view>
+
+  <!-- AI 信息条 -->
+  <view class="ai-info-bar">
+    <text class="info-item">AI：{{difficultyName}}</text>
+    <text class="info-sep">|</text>
+    <text class="info-item">你执{{humanPlayer === 1 ? '黑' : '白'}}</text>
+    <text class="info-sep" wx:if="{{elapsed}}">|</text>
+    <text class="info-item" wx:if="{{elapsed}}">用时 {{elapsed}}</text>
+  </view>
+
+  <!-- 棋盘 -->
+  <view class="board-wrapper" style="width:{{boardPx}}px;height:{{boardPx}}px;padding:{{halfCellPx}}px;">
+    <view class="board-grid" style="width:{{gridPx}}px;height:{{gridPx}}px;background-size:{{cellPx}}px {{cellPx}}px;background-position:{{halfCellPx}}px {{halfCellPx}}px;">
+      <view
+        wx:for="{{cells}}"
+        wx:key="key"
+        class="cell"
+        style="width:{{cellPx}}px;height:{{cellPx}}px;"
+        data-r="{{item.r}}"
+        data-c="{{item.c}}"
+        bindtap="onCellTap">
+        <view wx:if="{{item.isStar}}" class="star-dot"></view>
+        <view wx:if="{{item.v === 1}}" class="stone stone-black"></view>
+        <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
+        <view wx:if="{{item.isLast}}" class="last-marker"></view>
+        <view wx:if="{{item.isPending}}" class="pending-stone {{humanPlayer === 1 ? 'pending-black' : 'pending-white'}}"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 结果横幅 -->
+  <view class="result-banner" wx:if="{{gameOver}}">
+    <text class="result-title">{{winner === humanPlayer ? '恭喜获胜' : '对局失败'}}</text>
+    <text class="result-reason">{{winReason}}</text>
+  </view>
+
+  <!-- 控制按钮 -->
+  <view class="controls">
+    <view class="btn btn-secondary ctrl-btn {{(!canUndo || gameOver || aiThinking) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋</view>
+    <view class="btn btn-primary ctrl-btn" bindtap="onNewGame">重新开始</view>
+    <view class="btn btn-secondary ctrl-btn" bindtap="onBackHome">返回首页</view>
+  </view>
+
+  <!-- 棋盘尺寸选择 -->
+  <view class="size-row">
+    <text class="size-label">棋盘</text>
+    <picker mode="selector" range="{{sizeOptions}}" value="{{sizeIndex}}" bindchange="onSizeChange">
+      <view class="picker-value">{{sizeOptions[sizeIndex]}}</view>
+    </picker>
+  </view>
+</view>

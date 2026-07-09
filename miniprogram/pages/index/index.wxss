@@ -76,18 +76,9 @@
   letter-spacing: 4rpx;
 }
 
-/* 好友对战：金边描边次按钮，与主按钮形成主次 */
-.online-btn {
-  width: 100%;
-  height: 88rpx;
-  line-height: 88rpx;
-  font-size: 30rpx;
-  border-radius: 44rpx;
+/* 连续按钮之间留间距 */
+.start-btn + .start-btn {
   margin-top: 24rpx;
-  background: transparent;
-  color: #E8B870;
-  border: 1px solid rgba(232, 184, 112, 0.6);
-  letter-spacing: 4rpx;
 }
 
 .features {
