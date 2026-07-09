@@ -108,7 +108,9 @@ Page({
           c: c,
           v: this.board[r][c],
           isStar: isStar,
-          isLast: isLast
+          isLast: isLast,
+          isWinTarget: false,
+          isWinStone: false
         });
       }
     }
@@ -159,8 +161,20 @@ Page({
       updates.moveCount = this.data.moveCount + 1;
       updates.canUndo = this.history.length > 0;
       updates.lastMove = { r: r, c: c };
+
+      // 围子胜利（规则1/2）：高亮获胜棋形，延迟弹窗
+      const isSurroundWin = (result.rule === 1 || result.rule === 2);
+      if (isSurroundWin && result.winTarget) {
+        updates['cells[' + (result.winTarget.r * size + result.winTarget.c) + '].isWinTarget'] = true;
+        for (let i = 0; i < result.winStones.length; i++) {
+          const s = result.winStones[i];
+          updates['cells[' + (s.r * size + s.c) + '].isWinStone'] = true;
+        }
+      }
       this.setData(updates);
+
       const self = this;
+      const delay = isSurroundWin ? 1800 : 300;
       setTimeout(function () {
         wx.showModal({
           title: (result.winner === dango.BLACK ? '黑棋' : '白棋') + '胜利',
@@ -171,7 +185,7 @@ Page({
             if (res.confirm) self.onNewGame();
           }
         });
-      }, 300);
+      }, delay);
     } else {
       updates.currentPlayer = dango.opponent(player);
       updates.moveCount = this.data.moveCount + 1;

@@ -135,6 +135,44 @@
   z-index: 3;
 }
 
+/* 胜利动画：被围目标棋子红色脉冲环 */
+.win-target-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 112%;
+  height: 112%;
+  border-radius: 50%;
+  border: 4px solid #E53935;
+  box-sizing: border-box;
+  z-index: 6;
+  animation: win-pulse 0.9s ease-in-out infinite;
+}
+
+/* 胜利动画：围子棋子绿色发光环 */
+.win-stone-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 104%;
+  height: 104%;
+  border-radius: 50%;
+  border: 3px solid #4CAF50;
+  box-sizing: border-box;
+  z-index: 5;
+  animation: win-glow 0.9s ease-in-out infinite;
+}
+
+@keyframes win-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  50% { transform: translate(-50%, -50%) scale(1.25); opacity: 0.6; }
+}
+
+@keyframes win-glow {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+  50% { transform: translate(-50%, -50%) scale(1.12); box-shadow: 0 0 10rpx 5rpx rgba(76, 175, 80, 0.85); }
+}
+
 /* 结果横幅 */
 .result-banner {
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);

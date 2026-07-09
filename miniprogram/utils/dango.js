@@ -95,17 +95,34 @@ function allNeighborsAre(board, r, c, dirs, player) {
 
 // 规则一 + 规则二：围子胜
 // 对方任一棋子的 4 个正交邻居或 4 个对角邻居全部为当前玩家棋子 → 胜
+// 返回 { orthogonal, target:{r,c}, stones:[{r,c}...] }，stones 仅含棋盘内参与围子的己方棋子
 function checkSurroundWin(board, player) {
   const size = board.length;
   const opp = opponent(player);
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
       if (board[r][c] !== opp) continue;
-      if (allNeighborsAre(board, r, c, ORTHO, player)) return { orthogonal: true };
-      if (allNeighborsAre(board, r, c, DIAG, player)) return { orthogonal: false };
+      var orthoStones = collectSurroundStones(board, r, c, ORTHO, player);
+      if (orthoStones) return { orthogonal: true, target: { r: r, c: c }, stones: orthoStones };
+      var diagStones = collectSurroundStones(board, r, c, DIAG, player);
+      if (diagStones) return { orthogonal: false, target: { r: r, c: c }, stones: diagStones };
     }
   }
   return null;
+}
+
+// 收集 (r,c) 指定方向集合中参与围子的己方棋子坐标
+// 越界方向视为已满足（无棋子），棋盘内方向必须是 player 棋子；任一不满足返回 null
+function collectSurroundStones(board, r, c, dirs, player) {
+  const size = board.length;
+  var stones = [];
+  for (let i = 0; i < dirs.length; i++) {
+    var nr = r + dirs[i][0], nc = c + dirs[i][1];
+    if (!inBounds(nr, nc, size)) continue; // 边界，视为已满足
+    if (board[nr][nc] !== player) return null;
+    stones.push({ r: nr, c: nc });
+  }
+  return stones;
 }
 
 // ===== 规则四辅助：提取行/列/对角线（返回 {r,c,v} 数组） =====
@@ -278,11 +295,19 @@ function evaluateMove(board, lastR, lastC, player) {
   }
   const win = checkSurroundWin(board, player);
   if (win) {
+    var size = board.length;
+    var onEdge = (win.target.r === 0 || win.target.r === size - 1 ||
+                  win.target.c === 0 || win.target.c === size - 1);
+    var reason;
+    if (win.orthogonal) reason = onEdge ? '边缘十字围' : '十字围';
+    else reason = onEdge ? '边缘斜角围' : '斜角围';
     return {
       gameOver: true,
       winner: player,
-      reason: win.orthogonal ? '十字包围' : '对角包围',
-      rule: win.orthogonal ? 1 : 2
+      reason: reason,
+      rule: win.orthogonal ? 1 : 2,
+      winTarget: win.target,
+      winStones: win.stones
     };
   }
   return { gameOver: false };

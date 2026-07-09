@@ -35,6 +35,8 @@
         <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
         <view wx:if="{{item.isLast}}" class="last-marker"></view>
         <view wx:if="{{item.isPending}}" class="pending-stone {{humanPlayer === 1 ? 'pending-black' : 'pending-white'}}"></view>
+        <view wx:if="{{item.isWinTarget}}" class="win-target-marker"></view>
+        <view wx:if="{{item.isWinStone}}" class="win-stone-marker"></view>
       </view>
     </view>
   </view>
@@ -58,5 +60,39 @@
     <picker mode="selector" range="{{sizeOptions}}" value="{{sizeIndex}}" bindchange="onSizeChange">
       <view class="picker-value">{{sizeOptions[sizeIndex]}}</view>
     </picker>
+  </view>
+
+  <!-- 自定义结算弹窗 -->
+  <view class="result-modal" wx:if="{{showResult}}">
+    <view class="result-mask"></view>
+    <view class="result-card">
+      <view class="result-title-wrap">
+        <text class="result-title {{resultWon ? 'title-win' : 'title-lose'}}">{{resultWon ? '恭喜获胜' : '对局失败'}}</text>
+      </view>
+      <view wx:if="{{resultWon}}" class="result-info-grid">
+        <view class="info-col">
+          <text class="info-label">获胜方式</text>
+          <text class="info-value">{{resultReason}}</text>
+        </view>
+        <view class="info-divider"></view>
+        <view class="info-col">
+          <text class="info-label">用时</text>
+          <text class="info-value">{{resultElapsed}}</text>
+        </view>
+        <view class="info-divider"></view>
+        <view class="info-col">
+          <text class="info-label">落子总数</text>
+          <text class="info-value">{{resultMoves}}手</text>
+        </view>
+      </view>
+      <view wx:else class="result-reason-box">
+        <text class="info-label">失败原因</text>
+        <text class="result-reason-text">{{resultReason}}</text>
+      </view>
+      <view class="result-actions">
+        <view class="btn btn-secondary result-btn" bindtap="onResultHome">返回首页</view>
+        <view class="btn btn-primary result-btn" bindtap="onResultReplay">再来一局</view>
+      </view>
+    </view>
   </view>
 </view>

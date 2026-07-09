@@ -33,7 +33,13 @@ Page({
     aiPlayer: dango.WHITE,    // AI 执棋色
     aiThinking: false,
     elapsed: '',
-    pendingMove: null // 玩家首次点击的待确认位置 {r, c}
+    pendingMove: null, // 玩家首次点击的待确认位置 {r, c}
+    // 自定义结算弹窗
+    showResult: false,
+    resultWon: false,
+    resultReason: '',
+    resultElapsed: '',
+    resultMoves: 0
   },
 
   // 非响应式
@@ -111,7 +117,8 @@ Page({
       cells: cells,
       aiThinking: false,
       elapsed: '',
-      pendingMove: null
+      pendingMove: null,
+      showResult: false
     });
   },
 
@@ -128,7 +135,9 @@ Page({
           v: this.board[r][c],
           isStar: isStar,
           isLast: isLast,
-          isPending: false
+          isPending: false,
+          isWinTarget: false,
+          isWinStone: false
         });
       }
     }
@@ -210,8 +219,26 @@ Page({
       updates.lastMove = { r: r, c: c };
       const elapsedSec = Math.floor((Date.now() - this.startTime) / 1000);
       updates.elapsed = elapsedSec + '秒';
+
+      // 围子胜利（规则1/2）：高亮获胜棋形，延迟弹窗
+      const isSurroundWin = (result.rule === 1 || result.rule === 2);
+      if (isSurroundWin && result.winTarget) {
+        updates['cells[' + (result.winTarget.r * size + result.winTarget.c) + '].isWinTarget'] = true;
+        for (let i = 0; i < result.winStones.length; i++) {
+          const s = result.winStones[i];
+          updates['cells[' + (s.r * size + s.c) + '].isWinStone'] = true;
+        }
+      }
       this.setData(updates);
-      this.showResultModal(result, elapsedSec);
+
+      const self = this;
+      if (isSurroundWin) {
+        // 围子胜利：等待动画展示 1.8s 后弹窗
+        setTimeout(function () { self.showResultModal(result, elapsedSec); }, 1800);
+      } else {
+        // 判负：直接弹窗
+        this.showResultModal(result, elapsedSec);
+      }
     } else {
       updates.currentPlayer = dango.opponent(player);
       updates.moveCount = this.data.moveCount + 1;
@@ -239,26 +266,24 @@ Page({
   },
 
   showResultModal: function (result, elapsedSec) {
-    const self = this;
     const humanWon = result.winner === this.data.humanPlayer;
-    setTimeout(function () {
-      wx.showModal({
-        title: humanWon ? '恭喜获胜' : '对局失败',
-        content: humanWon
-          ? '用时：' + elapsedSec + '秒\n落子总数：' + self.data.moveCount + '手'
-          : '失败原因：' + result.reason,
-        showCancel: true,
-        cancelText: '返回首页',
-        confirmText: '再来一局',
-        success: function (res) {
-          if (res.confirm) {
-            self.onNewGame();
-          } else if (res.cancel) {
-            self.onBackHome();
-          }
-        }
-      });
-    }, 300);
+    this.setData({
+      showResult: true,
+      resultWon: humanWon,
+      resultReason: result.reason,
+      resultElapsed: elapsedSec + '秒',
+      resultMoves: this.data.moveCount
+    });
+  },
+
+  onResultReplay: function () {
+    this.setData({ showResult: false });
+    this.onNewGame();
+  },
+
+  onResultHome: function () {
+    this.setData({ showResult: false });
+    this.onBackHome();
   },
 
   onNewGame: function () {
