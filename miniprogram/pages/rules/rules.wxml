@@ -34,6 +34,8 @@
   <view class="diagram-card" wx:for="{{diagrams}}" wx:key="title" wx:for-item="diag">
     <text class="diag-title">{{diag.title}}</text>
     <view class="diag-stage">
+      <!-- 绿色对勾：合法获胜示例 -->
+      <view wx:if="{{diag.check}}" class="check-badge">✓</view>
       <!-- 棋盘网格 -->
       <view class="diag-grid" style="{{diag.gridStyle}}{{diag.bgSize}}">
         <!-- 边界灰色条：相对棋盘定位 -->

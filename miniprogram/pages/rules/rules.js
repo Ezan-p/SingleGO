@@ -53,7 +53,8 @@ function buildDiag(cfg) {
     bgSize: 'background-size:' + CELL + 'rpx ' + CELL + 'rpx;background-position:' + (CELL / 2) + 'rpx ' + (CELL / 2) + 'rpx;',
     boxStyle: boxStyle,
     boundaries: boundaries,
-    hasBoundary: boundaries.length > 0
+    hasBoundary: boundaries.length > 0,
+    check: !!cfg.check
   };
 }
 
@@ -96,7 +97,27 @@ const diagrams = [
     marks: M([0, 0, 'circle']),
     boundary: ['left', 'top']
   }),
-  // 5. 八方全占判负
+  // 5. 角落十字围获胜（两正交方向）
+  buildDiag({
+    title: '角落十字围获胜',
+    desc: '当目标棋子位于棋盘角落时，棋盘边界可视为天然阻挡，只需占据棋盘内两个正交方向（东、南）即可完成十字围并获胜。',
+    cols: 4, rows: 4,
+    stones: S([0, 0, BLACK], [0, 1, WHITE], [1, 0, WHITE]),
+    marks: M([0, 0, 'circle']),
+    boundary: ['left', 'top'],
+    check: true
+  }),
+  // 6. 下边缘斜角围获胜（两对角方向）
+  buildDiag({
+    title: '下边缘斜角围获胜',
+    desc: '当目标棋子位于棋盘边缘时，棋盘边界可视为天然阻挡，只需占据棋盘内两个对角方向（西北、东北）即可完成斜角围并获胜。',
+    cols: 5, rows: 5,
+    stones: S([4, 2, BLACK], [3, 1, WHITE], [3, 3, WHITE]),
+    marks: M([4, 2, 'circle']),
+    boundary: ['bottom'],
+    check: true
+  }),
+  // 7. 八方全占判负
   buildDiag({
     title: '八方全占判负',
     desc: '己方任意棋子周围八个方向全部为己方棋子时，立即判负。',

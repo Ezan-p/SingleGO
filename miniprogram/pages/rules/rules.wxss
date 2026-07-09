@@ -123,6 +123,25 @@
   border: 1px dashed rgba(120, 120, 120, 0.6);
 }
 
+/* 绿色对勾徽章：合法获胜示例 */
+.check-badge {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background-color: #4CAF50;
+  color: #fff;
+  font-size: 34rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: 0 2rpx 8rpx rgba(76, 175, 80, 0.5);
+}
+
 /* 棋盘网格 */
 .diag-grid {
   position: relative;
