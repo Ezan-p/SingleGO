@@ -1,0 +1,9 @@
+{
+  "name": "game-sync",
+  "version": "1.0.0",
+  "description": "单围棋游戏同步系统",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

@@ -7,6 +7,47 @@
   background:
     radial-gradient(ellipse at 50% 0%, #5C3A1E 0%, #3D2410 55%, #2A1808 100%);
   color: #F0E4D0;
+  position: relative;
+}
+
+/* 用户入口 - 左上角 */
+.user-entry {
+  position: absolute;
+  top: 40rpx;
+  left: 40rpx;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 20rpx;
+  background: rgba(58, 38, 20, 0.6);
+  border: 1px solid rgba(232, 184, 112, 0.2);
+  border-radius: 40rpx;
+  z-index: 10;
+}
+
+.user-avatar {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 28rpx;
+  border: 2px solid rgba(232, 184, 112, 0.4);
+  margin-right: 12rpx;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-nickname {
+  font-size: 24rpx;
+  color: #E8B870;
+  line-height: 1.2;
+}
+
+.user-rank {
+  font-size: 20rpx;
+  color: rgba(232, 184, 112, 0.6);
+  line-height: 1.2;
 }
 
 .header {

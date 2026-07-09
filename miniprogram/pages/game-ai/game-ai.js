@@ -1,8 +1,10 @@
 // AI 对战页
+const app = getApp();
 const dango = require('../../utils/dango.js');
 const ai = require('../../utils/ai.js');
 const undoManager = require('../../utils/undo-manager.js');
 const rewardedAd = require('../../utils/rewarded-ad.js');
+const rank = require('../../utils/rank.js');
 
 const DIFFICULTY_NAMES = {
   easy: '简单',
@@ -45,7 +47,13 @@ Page({
     resultWon: false,
     resultReason: '',
     resultElapsed: '',
-    resultMoves: 0
+    resultMoves: 0,
+    // 段位相关
+    showPromotion: false,
+    promotionOldRank: '',
+    promotionNewRank: '',
+    promotionTierIcon: '',
+    rankUpdated: false
   },
 
   // 非响应式
@@ -286,6 +294,52 @@ Page({
       resultElapsed: elapsedSec + '秒',
       resultMoves: this.data.moveCount
     });
+
+    // AI对战后更新段位积分（可配置，默认不影响）
+    if (!this.data.rankUpdated) {
+      this.updateRankAfterAIGame(humanWon);
+    }
+  },
+
+  // AI对战后更新段位积分
+  updateRankAfterAIGame: function(humanWon) {
+    this.data.rankUpdated = true;
+
+    var profile = app.getPlayerProfile();
+    if (!profile) return;
+
+    // 读取设置，判断AI对战是否影响段位
+    var settings = wx.getStorageSync('settings') || {};
+    var mode = settings.rankAffectsAI ? 'ai' : 'local';
+    var result = humanWon ? 'win' : 'loss';
+
+    var oldRankName = rank.getRankName(profile.rankPoints);
+    var rankResult = rank.applyPointsChange(profile.rankPoints, mode, result);
+
+    // 更新战绩（总是统计AI对战数据）
+    rank.updateStats(profile.stats, 'ai', humanWon ? 'win' : 'loss');
+
+    // 只有配置了影响段位时才更新积分
+    if (settings.rankAffectsAI) {
+      profile.rankPoints = rankResult.newPoints;
+      profile.rankName = rankResult.newRank.name;
+    }
+    app.updatePlayerProfile(profile);
+
+    // 升段动画
+    if (rankResult.promoted && settings.rankAffectsAI) {
+      var tierIcons = { beginner: '🌱', kyu: '🛡', dan: '💎', master: '👑' };
+      this.setData({
+        showPromotion: true,
+        promotionOldRank: oldRankName,
+        promotionNewRank: rankResult.newRank.name,
+        promotionTierIcon: tierIcons[rankResult.newRank.tier] || '🌱'
+      });
+    }
+  },
+
+  onClosePromotion: function() {
+    this.setData({ showPromotion: false });
   },
 
   onResultReplay: function () {
@@ -321,6 +375,7 @@ Page({
 
   onNewGame: function () {
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
+    this.data.rankUpdated = false;
     this.initGame(this.data.boardSize);
     if (this.data.aiPlayer === dango.BLACK) {
       this.scheduleAIMove();

@@ -1,0 +1,116 @@
+<view class="profile-page">
+  <!-- 头部信息卡 -->
+  <view class="profile-header">
+    <image class="profile-avatar" src="{{avatar}}" bindtap="onEditAvatar" />
+    <view class="profile-name-row">
+      <text class="profile-nickname">{{nickname}}</text>
+      <view class="edit-btn" bindtap="onEditNickname">
+        <text class="edit-icon">✎</text>
+      </view>
+    </view>
+    <view class="profile-uid" bindlongpress="onCopyUID">UID: {{uid}}</view>
+    <view class="rank-badge" style="background-color: {{rankColor}};">
+      <text class="rank-badge-text">{{rankName}}</text>
+    </view>
+    <view class="rank-progress-row">
+      <text class="rank-points-text">{{rankPoints}}</text>
+      <view class="rank-progress-bar">
+        <view class="rank-progress-fill" style="width: {{progress * 100}}%; background-color: {{rankColor}};"></view>
+      </view>
+      <text class="rank-points-text">{{nextRankPoints}}</text>
+    </view>
+    <view class="register-time" wx:if="{{registerTime}}">注册于 {{registerTime}}</view>
+  </view>
+
+  <!-- 对局数据 -->
+  <view class="stats-section">
+    <view class="section-title">对局数据</view>
+    <view class="stats-tabs">
+      <view class="stats-tab {{statsTab === 'online' ? 'tab-active' : ''}}" bindtap="onStatsTabTap" data-tab="online">联网对战</view>
+      <view class="stats-tab {{statsTab === 'ai' ? 'tab-active' : ''}}" bindtap="onStatsTabTap" data-tab="ai">系统对战</view>
+      <view class="stats-tab {{statsTab === 'local' ? 'tab-active' : ''}}" bindtap="onStatsTabTap" data-tab="local">本地对战</view>
+    </view>
+    <view class="stats-grid">
+      <view class="stat-item">
+        <text class="stat-value">{{statsTab === 'online' ? onlineStats.total : statsTab === 'ai' ? aiStats.total : localStats.total}}</text>
+        <text class="stat-label">总局数</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value stat-win">{{statsTab === 'online' ? onlineStats.wins : statsTab === 'ai' ? aiStats.wins : localStats.wins}}</text>
+        <text class="stat-label">胜场</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value stat-loss">{{statsTab === 'online' ? onlineStats.losses : statsTab === 'ai' ? aiStats.losses : localStats.losses}}</text>
+        <text class="stat-label">负场</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value">{{statsTab === 'online' ? (onlineStats.total ? Math.round(onlineStats.wins / onlineStats.total * 100) : 0) : statsTab === 'ai' ? (aiStats.total ? Math.round(aiStats.wins / aiStats.total * 100) : 0) : (localStats.total ? Math.round(localStats.wins / localStats.total * 100) : 0)}}%</text>
+        <text class="stat-label">胜率</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value">{{statsTab === 'online' ? onlineStats.currentStreak : statsTab === 'ai' ? aiStats.currentStreak : localStats.currentStreak}}</text>
+        <text class="stat-label">当前连胜</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value">{{statsTab === 'online' ? onlineStats.bestStreak : statsTab === 'ai' ? aiStats.bestStreak : localStats.bestStreak}}</text>
+        <text class="stat-label">最高连胜</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 成就信息（预留） -->
+  <view class="achievement-section">
+    <view class="section-title">成就</view>
+    <view class="achievement-placeholder">
+      <text class="achievement-lock">🔒</text>
+      <text class="achievement-hint">成就系统即将开放</text>
+    </view>
+    <view class="achievement-badges">
+      <view class="badge-item badge-locked">?</view>
+      <view class="badge-item badge-locked">?</view>
+      <view class="badge-item badge-locked">?</view>
+      <view class="badge-item badge-locked">?</view>
+    </view>
+  </view>
+
+  <!-- 数据管理 -->
+  <view class="data-section">
+    <view class="section-title">数据管理</view>
+    <view class="data-card">
+      <view class="data-row" bindtap="onEditNickname">
+        <text class="data-label">修改昵称</text>
+        <text class="data-arrow">›</text>
+      </view>
+      <view class="data-divider"></view>
+      <view class="data-row" bindtap="onEditAvatar">
+        <text class="data-label">修改头像</text>
+        <text class="data-arrow">›</text>
+      </view>
+      <view class="data-divider"></view>
+      <view class="data-row">
+        <text class="data-label">当前版本</text>
+        <text class="data-value">{{version}}</text>
+      </view>
+      <view class="data-divider"></view>
+      <view class="data-row data-danger" bindtap="onClearData">
+        <text class="data-label">清除本地数据</text>
+        <text class="data-arrow">›</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 返回按钮 -->
+  <view class="btn btn-primary back-btn" bindtap="onBack">返回</view>
+
+  <!-- 升段动画 -->
+  <view class="promotion-overlay" wx:if="{{showPromotion}}" catchtap="onClosePromotion">
+    <view class="promotion-card">
+      <view class="promotion-icon">{{promotionTierIcon}}</view>
+      <text class="promotion-title">段位提升！</text>
+      <text class="promotion-old">{{promotionOldRank}}</text>
+      <view class="promotion-arrow">→</view>
+      <text class="promotion-new">{{promotionNewRank}}</text>
+      <text class="promotion-hint">点击任意处关闭</text>
+    </view>
+  </view>
+</view>

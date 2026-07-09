@@ -123,4 +123,16 @@
       </view>
     </view>
   </view>
+
+  <!-- 升段动画 -->
+  <view class="promotion-overlay" wx:if="{{showPromotion}}" catchtap="onClosePromotion">
+    <view class="promotion-card">
+      <view class="promotion-icon">{{promotionTierIcon}}</view>
+      <text class="promotion-title">段位提升！</text>
+      <text class="promotion-old">{{promotionOldRank}}</text>
+      <view class="promotion-arrow">→</view>
+      <text class="promotion-new">{{promotionNewRank}}</text>
+      <text class="promotion-hint">点击任意处关闭</text>
+    </view>
+  </view>
 </view>

@@ -1,0 +1,9 @@
+{
+  "name": "match-system",
+  "version": "1.0.0",
+  "description": "单围棋联网对战匹配系统",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

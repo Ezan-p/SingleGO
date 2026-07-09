@@ -1,6 +1,8 @@
 // 在线对局页
 const dango = require('../../utils/dango.js');
 const online = require('../../utils/online.js');
+const rank = require('../../utils/rank.js');
+const app = getApp();
 
 Page({
   data: {
@@ -20,7 +22,8 @@ Page({
     cellPx: 0,
     halfCellPx: 0,
     gridPx: 0,
-    cells: []
+    cells: [],
+    myRankName: ''
   },
 
   // 非响应式
@@ -42,6 +45,7 @@ Page({
     this.myOpenid = getApp().globalData.openid;
     this._lastAppliedMove = null;
     this._endedShown = false;
+    this.setData({ myRankName: rank.getRankName(app.globalData.rankPoints) });
 
     const sys = wx.getSystemInfoSync();
     const rpxToPx = sys.windowWidth / 750;

@@ -1,0 +1,99 @@
+<view class="game-online-page">
+  <!-- 对手信息条 -->
+  <view class="players-bar">
+    <view class="player-side">
+      <image class="player-avatar" src="{{myInfo.avatar}}"></image>
+      <view class="player-info">
+        <text class="player-name">{{myInfo.nickname}}</text>
+        <text class="player-tag">你 · {{myColor === 'black' ? '黑' : '白'}} · {{myRankName}}</text>
+      </view>
+      <view class="stone-dot {{myColor === 'black' ? 'dot-black' : 'dot-white'}}"></view>
+    </view>
+    
+    <view class="vs-text">VS</view>
+    
+    <view class="player-side">
+      <view class="stone-dot {{myColor === 'black' ? 'dot-white' : 'dot-black'}}"></view>
+      <view class="player-info player-info-right">
+        <text class="player-name">{{opponentInfo.nickname}}</text>
+        <text class="player-tag">{{myColor === 'black' ? '白' : '黑'}} · 对手</text>
+      </view>
+      <image class="player-avatar" src="{{opponentInfo.avatar}}"></image>
+    </view>
+  </view>
+
+  <!-- 状态栏 -->
+  <view class="status-bar">
+    <view class="player-indicator">
+      <view class="stone-dot {{game.current_player === 'black' ? 'dot-black' : 'dot-white'}}"></view>
+      <text class="status-text" wx:if="{{!gameOver}}">
+        {{isMyTurn ? '你的回合' : '对手回合'}}
+        <text wx:if="{{pendingUndoRequest}}" class="undo-notice"> (有悔棋请求)</text>
+      </text>
+      <text class="status-text" wx:else>
+        {{game.winner === myPlayer ? '你胜利了！' : '对手胜利'}}
+      </text>
+    </view>
+    <text class="move-count">第 {{game.move_count}} 手</text>
+  </view>
+
+  <!-- 悔棋请求弹窗 -->
+  <view class="undo-modal" wx:if="{{showUndoRequest}}">
+    <view class="undo-modal-content">
+      <text class="undo-title">悔棋请求</text>
+      <text class="undo-message">对手请求悔棋到第 {{undoRequest.target_move_number}} 手</text>
+      <view class="undo-buttons">
+        <view class="btn btn-secondary undo-btn" bindtap="onRejectUndo">拒绝</view>
+        <view class="btn btn-primary undo-btn" bindtap="onApproveUndo">同意</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 棋盘 -->
+  <view class="board-wrapper" style="width:{{boardPx}}px;height:{{boardPx}}px;padding:{{halfCellPx}}px;">
+    <view class="board-grid" style="width:{{gridPx}}px;height:{{gridPx}}px;background-size:{{cellPx}}px {{cellPx}}px;background-position:{{halfCellPx}}px {{halfCellPx}}px;">
+      <view
+        wx:for="{{cells}}"
+        wx:key="key"
+        class="cell"
+        style="width:{{cellPx}}px;height:{{cellPx}}px;"
+        data-r="{{item.r}}"
+        data-c="{{item.c}}"
+        bindtap="onCellTap">
+        <view wx:if="{{item.isStar}}" class="star-dot"></view>
+        <view wx:if="{{item.v === 1}}" class="stone stone-black"></view>
+        <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
+        <view wx:if="{{item.isLast}}" class="last-marker"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 结果横幅 -->
+  <view class="result-banner" wx:if="{{gameOver}}">
+    <text class="result-title">{{game.winner === 'black' ? '黑棋胜利' : game.winner === 'white' ? '白棋胜利' : '平局'}}</text>
+    <text class="result-reason">{{winReasonText}}</text>
+    <view class="result-buttons">
+      <view class="btn btn-secondary" bindtap="onBackToHome">返回首页</view>
+      <view class="btn btn-primary" bindtap="onRematch">再来一局</view>
+    </view>
+  </view>
+
+  <!-- 控制按钮 -->
+  <view class="controls" wx:if="{{!gameOver}}">
+    <view class="btn btn-undo ctrl-btn" bindtap="onRequestUndo" wx:if="{{isMyTurn}}">悔棋</view>
+    <view class="btn btn-resign ctrl-btn" bindtap="onResign">认输</view>
+    <view class="btn btn-leave ctrl-btn" bindtap="onLeave">离开对局</view>
+  </view>
+
+  <!-- 升段动画 -->
+  <view class="promotion-overlay" wx:if="{{showPromotion}}" catchtap="onClosePromotion">
+    <view class="promotion-card">
+      <view class="promotion-icon">{{promotionTierIcon}}</view>
+      <text class="promotion-title">段位提升！</text>
+      <text class="promotion-old">{{promotionOldRank}}</text>
+      <view class="promotion-arrow">→</view>
+      <text class="promotion-new">{{promotionNewRank}}</text>
+      <text class="promotion-hint">点击任意处关闭</text>
+    </view>
+  </view>
+</view>

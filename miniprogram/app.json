@@ -3,11 +3,14 @@
     "pages/index/index",
     "pages/room/room",
     "pages/online/online",
+    "pages/match/index",
+    "pages/game-online/index",
     "pages/game/game",
     "pages/ai-setup/ai-setup",
     "pages/game-ai/game-ai",
     "pages/rules/rules",
-    "pages/settings/settings"
+    "pages/settings/settings",
+    "pages/profile/profile"
   ],
   "window": {
     "backgroundTextStyle": "light",

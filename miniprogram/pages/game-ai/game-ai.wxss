@@ -515,3 +515,79 @@
   color: var(--primary-color);
 }
 
+/* 升段动画 */
+.promotion-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: promoFadeIn 0.3s ease-out;
+}
+
+.promotion-card {
+  background: linear-gradient(135deg, #C8923C 0%, #8B5A2B 100%);
+  border-radius: 24rpx;
+  padding: 60rpx 80rpx;
+  text-align: center;
+  box-shadow: 0 16rpx 64rpx rgba(0, 0, 0, 0.6);
+  animation: promoScaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.promotion-icon {
+  font-size: 64rpx;
+  margin-bottom: 20rpx;
+}
+
+.promotion-title {
+  display: block;
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #FFF8E8;
+  margin-bottom: 30rpx;
+  letter-spacing: 4rpx;
+}
+
+.promotion-old {
+  display: block;
+  font-size: 30rpx;
+  color: rgba(255, 248, 232, 0.6);
+  margin-bottom: 16rpx;
+}
+
+.promotion-arrow {
+  font-size: 40rpx;
+  color: rgba(255, 248, 232, 0.8);
+  margin-bottom: 16rpx;
+}
+
+.promotion-new {
+  display: block;
+  font-size: 42rpx;
+  font-weight: bold;
+  color: #FFF8E8;
+  margin-bottom: 30rpx;
+  letter-spacing: 4rpx;
+}
+
+.promotion-hint {
+  display: block;
+  font-size: 22rpx;
+  color: rgba(255, 248, 232, 0.4);
+}
+
+@keyframes promoFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes promoScaleIn {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+

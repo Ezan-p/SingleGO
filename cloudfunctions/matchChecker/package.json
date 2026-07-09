@@ -1,0 +1,9 @@
+{
+  "name": "match-checker",
+  "version": "1.0.0",
+  "description": "单围棋匹配检查器",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

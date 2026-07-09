@@ -5,7 +5,7 @@
       <view class="stone-dot {{myColor === 1 ? 'dot-black' : 'dot-white'}}"></view>
       <view class="player-info">
         <text class="player-name">{{myColor === 1 ? (host.nickname || '黑棋') : (guest.nickname || '白棋')}}</text>
-        <text class="player-tag">你 · {{myColor === 1 ? '黑' : '白'}}</text>
+        <text class="player-tag">你 · {{myColor === 1 ? '黑' : '白'}} · {{myRankName}}</text>
       </view>
     </view>
     <view class="vs-text">VS</view>
