@@ -251,6 +251,13 @@ Page({
       updates.gameOver = false;
       updates.winner = 0;
       updates.winReason = '';
+      // 清除所有高亮标记（获胜/失败棋形），结束高亮展示
+      for (let i = 0; i < this.data.cells.length; i++) {
+        if (this.data.cells[i].isWinTarget || this.data.cells[i].isWinStone) {
+          updates['cells[' + i + '].isWinTarget'] = false;
+          updates['cells[' + i + '].isWinStone'] = false;
+        }
+      }
     }
 
     this.setData(updates);

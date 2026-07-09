@@ -1,10 +1,10 @@
 Page({
   data: {
     difficulties: [
-      { key: 'easy', name: '简单', desc: '适合新手，随机为主，约30%胜率' },
-      { key: 'normal', name: '普通', desc: '能发现一步胜机，偶尔失误，约50%胜率' },
-      { key: 'hard', name: '困难', desc: '主动围子与破坏，规避判负，约70%胜率' },
-      { key: 'master', name: '大师', desc: '深度搜索，极少失误，90%以上胜率' }
+      { key: 'easy', name: '简单', desc: '适合新手，随机为主，约90%胜率' },
+      { key: 'normal', name: '普通', desc: '能发现一步胜机，偶尔失误，约70%胜率' },
+      { key: 'hard', name: '困难', desc: '主动围子与破坏，规避判负，约50%胜率' },
+      { key: 'master', name: '大师', desc: '深度搜索，极少失误，约30%胜率' }
     ],
     selectedDifficulty: 'normal',
     selectedColor: 'black', // black=玩家执黑(先手), white=玩家执白(后手)
