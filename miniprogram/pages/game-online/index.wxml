@@ -1,24 +1,34 @@
 <view class="game-online-page">
+  <!-- 网络状态徽标 -->
+  <view class="net-badge {{netConnected ? 'net-online' : 'net-offline'}}">
+    <text>{{netConnected ? netType : '断开'}}</text>
+  </view>
+
+  <!-- 掉线横幅 -->
+  <view class="disconnect-banner" wx:if="{{showDisconnectBanner}}">
+    <text>网络已断开，正在尝试重连...</text>
+  </view>
+
   <!-- 对手信息条 -->
   <view class="players-bar">
     <view class="player-side">
-      <image class="player-avatar" src="{{myInfo.avatar}}"></image>
+      <image class="player-avatar" src="{{myInfo.avatar}}" mode="aspectFill"></image>
       <view class="player-info">
         <text class="player-name">{{myInfo.nickname}}</text>
         <text class="player-tag">你 · {{myColor === 'black' ? '黑' : '白'}} · {{myRankName}}</text>
       </view>
       <view class="stone-dot {{myColor === 'black' ? 'dot-black' : 'dot-white'}}"></view>
     </view>
-    
+
     <view class="vs-text">VS</view>
-    
+
     <view class="player-side">
       <view class="stone-dot {{myColor === 'black' ? 'dot-white' : 'dot-black'}}"></view>
       <view class="player-info player-info-right">
         <text class="player-name">{{opponentInfo.nickname}}</text>
-        <text class="player-tag">{{myColor === 'black' ? '白' : '黑'}} · 对手</text>
+        <text class="player-tag">{{myColor === 'black' ? '白' : '黑'}} · 对手 · {{opponentRankName}}</text>
       </view>
-      <image class="player-avatar" src="{{opponentInfo.avatar}}"></image>
+      <image class="player-avatar" src="{{opponentInfo.avatar}}" mode="aspectFill"></image>
     </view>
   </view>
 
@@ -31,7 +41,7 @@
         <text wx:if="{{pendingUndoRequest}}" class="undo-notice"> (有悔棋请求)</text>
       </text>
       <text class="status-text" wx:else>
-        {{game.winner === myPlayer ? '你胜利了！' : '对手胜利'}}
+        {{game.winner === myColor ? '你胜利了！' : '对手胜利'}}
       </text>
     </view>
     <text class="move-count">第 {{game.move_count}} 手</text>
@@ -41,7 +51,7 @@
   <view class="undo-modal" wx:if="{{showUndoRequest}}">
     <view class="undo-modal-content">
       <text class="undo-title">悔棋请求</text>
-      <text class="undo-message">对手请求悔棋到第 {{undoRequest.target_move_number}} 手</text>
+      <text class="undo-message">对手请求悔棋到第 {{pendingUndoRequest.target_move_number}} 手</text>
       <view class="undo-buttons">
         <view class="btn btn-secondary undo-btn" bindtap="onRejectUndo">拒绝</view>
         <view class="btn btn-primary undo-btn" bindtap="onApproveUndo">同意</view>
@@ -55,7 +65,7 @@
       <view
         wx:for="{{cells}}"
         wx:key="key"
-        class="cell"
+        class="cell {{item.isWinStone ? 'cell-win-stone' : ''}} {{item.isWinTarget ? 'cell-win-target' : ''}}"
         style="width:{{cellPx}}px;height:{{cellPx}}px;"
         data-r="{{item.r}}"
         data-c="{{item.c}}"
@@ -63,26 +73,69 @@
         <view wx:if="{{item.isStar}}" class="star-dot"></view>
         <view wx:if="{{item.v === 1}}" class="stone stone-black"></view>
         <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
-        <view wx:if="{{item.isLast}}" class="last-marker"></view>
+        <view wx:if="{{item.isLast && !gameOver}}" class="last-marker"></view>
+        <view wx:if="{{item.isPending}}" class="preview {{pendingColor === 'black' ? 'preview-black' : 'preview-white'}}"></view>
+        <view wx:if="{{item.isWinStone || item.isWinTarget}}" class="win-highlight"></view>
       </view>
-    </view>
-  </view>
-
-  <!-- 结果横幅 -->
-  <view class="result-banner" wx:if="{{gameOver}}">
-    <text class="result-title">{{game.winner === 'black' ? '黑棋胜利' : game.winner === 'white' ? '白棋胜利' : '平局'}}</text>
-    <text class="result-reason">{{winReasonText}}</text>
-    <view class="result-buttons">
-      <view class="btn btn-secondary" bindtap="onBackToHome">返回首页</view>
-      <view class="btn btn-primary" bindtap="onRematch">再来一局</view>
     </view>
   </view>
 
   <!-- 控制按钮 -->
   <view class="controls" wx:if="{{!gameOver}}">
-    <view class="btn btn-undo ctrl-btn" bindtap="onRequestUndo" wx:if="{{isMyTurn}}">悔棋</view>
+    <view class="btn btn-undo ctrl-btn {{(undoUsed || !isMyTurn) ? 'ctrl-btn-disabled' : ''}}" bindtap="onRequestUndo">悔棋{{undoUsed ? '(已用)' : ''}}</view>
     <view class="btn btn-resign ctrl-btn" bindtap="onResign">认输</view>
-    <view class="btn btn-leave ctrl-btn" bindtap="onLeave">离开对局</view>
+    <view class="btn btn-leave ctrl-btn" bindtap="onLeave">离开</view>
+  </view>
+
+  <!-- 结算 overlay -->
+  <view class="settlement-overlay" wx:if="{{showSettlement && settlement}}">
+    <view class="settlement-card">
+      <view class="settlement-result {{settlement.won ? 'result-win' : 'result-loss'}}">
+        <text class="result-title">{{settlement.won ? '胜利' : '失败'}}</text>
+      </view>
+      <view class="settlement-body">
+        <view class="settlement-row">
+          <text class="settlement-label">获胜方式</text>
+          <text class="settlement-value">{{settlement.reasonText}}</text>
+        </view>
+        <view class="settlement-row">
+          <text class="settlement-label">总步数</text>
+          <text class="settlement-value">{{settlement.moveCount}} 手</text>
+        </view>
+        <view class="settlement-row">
+          <text class="settlement-label">对局时长</text>
+          <text class="settlement-value">{{settlement.durationText || '--'}}</text>
+        </view>
+        <view class="settlement-row">
+          <text class="settlement-label">积分变化</text>
+          <text class="settlement-value {{settlement.pointsDelta >= 0 ? 'points-up' : 'points-down'}}">
+            {{settlement.pointsDelta >= 0 ? '+' : ''}}{{settlement.pointsDelta}}
+          </text>
+        </view>
+        <view class="settlement-row">
+          <text class="settlement-label">当前段位</text>
+          <text class="settlement-value">{{settlement.rankName}}</text>
+        </view>
+      </view>
+      <view class="settlement-buttons">
+        <view class="btn btn-primary settlement-btn" bindtap="onRematch" wx:if="{{!rematchSent}}">再来一局</view>
+        <view class="btn btn-secondary settlement-btn" wx:if="{{rematchSent}}">等待响应...</view>
+        <view class="btn btn-secondary settlement-btn" bindtap="onContinueMatch">继续匹配</view>
+        <view class="btn btn-ghost settlement-btn" bindtap="onBackToLobby">返回大厅</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 再来一局邀请（对方发来） -->
+  <view class="rematch-invite-overlay" wx:if="{{rematchReceived && !showSettlement}}">
+    <view class="rematch-invite-card">
+      <text class="rematch-invite-title">再来一局？</text>
+      <text class="rematch-invite-msg">对手邀请你再战一局</text>
+      <view class="rematch-invite-buttons">
+        <view class="btn btn-secondary" data-accept="false" bindtap="onRespondRematch">拒绝</view>
+        <view class="btn btn-primary" data-accept="true" bindtap="onRespondRematch">同意</view>
+      </view>
+    </view>
   </view>
 
   <!-- 升段动画 -->

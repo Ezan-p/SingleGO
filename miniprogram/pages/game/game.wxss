@@ -135,6 +135,40 @@
   z-index: 3;
 }
 
+/* 两下落子预览：半透明棋形提示 */
+.preview {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 84%;
+  height: 84%;
+  border-radius: 50%;
+  z-index: 3;
+  pointer-events: none;
+  animation: preview-pulse 1.1s ease-in-out infinite;
+}
+
+.preview-black {
+  background: radial-gradient(circle at 30% 30%, rgba(120, 120, 120, 0.55) 0%, rgba(0, 0, 0, 0.5) 100%);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.3);
+}
+
+.preview-white {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.7) 0%, rgba(210, 210, 210, 0.6) 100%);
+  border: 1px solid rgba(150, 150, 150, 0.5);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.2);
+}
+
+@keyframes preview-pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* 胜利动画：被围目标棋子红色脉冲环 */
 .win-target-marker {
   position: absolute;

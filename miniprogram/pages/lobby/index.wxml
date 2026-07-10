@@ -1,0 +1,56 @@
+<view class="lobby-page">
+  <!-- 网络状态徽标 -->
+  <view class="net-badge {{netConnected ? 'net-online' : 'net-offline'}}">
+    <text>{{netConnected ? ('网络: ' + netType) : '网络已断开'}}</text>
+  </view>
+
+  <!-- 玩家信息卡片 -->
+  <view class="player-card">
+    <image class="avatar" src="{{avatar || '/images/avatar.png'}}" bindtap="onProfile"></image>
+    <view class="player-meta">
+      <text class="nickname">{{nickname || '未设置'}}</text>
+      <view class="rank-line">
+        <text class="rank-name">{{rankName}}</text>
+        <text class="rank-points">{{rankPoints}} 积分</text>
+      </view>
+      <view class="uid-line" bindtap="onCopyUid">
+        <text class="uid-text">UID: {{uid}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 战绩摘要 -->
+  <view class="stats-card">
+    <view class="stats-item">
+      <text class="stats-value">{{totalGames}}</text>
+      <text class="stats-label">总对局</text>
+    </view>
+    <view class="stats-item">
+      <text class="stats-value stats-win">{{wins}}</text>
+      <text class="stats-label">胜场</text>
+    </view>
+    <view class="stats-item">
+      <text class="stats-value stats-loss">{{losses}}</text>
+      <text class="stats-label">负场</text>
+    </view>
+    <view class="stats-item">
+      <text class="stats-value">{{currentStreak}}</text>
+      <text class="stats-label">连胜</text>
+    </view>
+  </view>
+
+  <!-- 操作区 -->
+  <view class="actions">
+    <view class="btn btn-primary {{matching ? 'btn-disabled' : ''}}" bindtap="onStartMatch">
+      {{matching ? '匹配中...' : '开始匹配'}}
+    </view>
+    <view class="btn btn-secondary" bindtap="onViewRecords">最近战绩</view>
+    <view class="btn btn-ghost" bindtap="onBackHome">返回首页</view>
+  </view>
+
+  <!-- 匹配中状态 -->
+  <view class="matching-status" wx:if="{{matching}}">
+    <text class="matching-text">正在匹配中...</text>
+    <view class="matching-cancel" bindtap="onCancelMatch">取消匹配</view>
+  </view>
+</view>

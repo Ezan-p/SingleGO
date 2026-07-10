@@ -1,6 +1,13 @@
 // 联网对战工具模块
 const dango = require('./dango.js');
-const app = getApp();
+const requestIdUtil = require('./request-id.js');
+
+let app = null;
+function getAppSafe() {
+  if (app) return app;
+  try { app = getApp(); } catch (e) { app = null; }
+  return app;
+}
 
 // 数据库引用
 function db() {
@@ -13,23 +20,23 @@ function cmd() {
 
 // 确保用户已授权并获取openid
 function ensureAuth() {
-  if (app.globalData.openid) {
-    return Promise.resolve(app.globalData);
+  const a = getAppSafe();
+  if (a && a.globalData && a.globalData.openid) {
+    return Promise.resolve(a.globalData);
   }
-  
+
   return new Promise((resolve, reject) => {
-    if (!app.cloudInited) {
+    if (!a || !a.cloudInited) {
       reject(new Error('云开发未初始化，请在 envList.js 填入 envId'));
       return;
     }
-    
     wx.cloud.callFunction({
       name: 'getOpenId'
     }).then(res => {
       const openid = res.result.openid;
       if (openid) {
-        app.globalData.openid = openid;
-        resolve(app.globalData);
+        a.globalData.openid = openid;
+        resolve(a.globalData);
       } else {
         reject(new Error('获取openid失败'));
       }
@@ -39,12 +46,20 @@ function ensureAuth() {
   });
 }
 
+// 通用云函数调用封装
+function callGameSync(action, data) {
+  return ensureAuth().then(() => {
+    return wx.cloud.callFunction({
+      name: 'gameSync',
+      data: Object.assign({ $url: action }, data || {})
+    });
+  });
+}
+
 // 加入匹配队列
 function joinMatchQueue() {
   return ensureAuth().then(() => {
-    return wx.cloud.callFunction({
-      name: 'matchSystem'
-    });
+    return wx.cloud.callFunction({ name: 'matchSystem' });
   });
 }
 
@@ -53,9 +68,7 @@ function cancelMatch() {
   return ensureAuth().then(() => {
     return wx.cloud.callFunction({
       name: 'matchSystem',
-      data: {
-        $url: 'cancelMatch'
-      }
+      data: { $url: 'cancelMatch' }
     });
   });
 }
@@ -65,144 +78,206 @@ function getMatchStatus() {
   return ensureAuth().then(() => {
     return wx.cloud.callFunction({
       name: 'matchSystem',
-      data: {
-        $url: 'getMatchStatus'
-      }
+      data: { $url: 'getMatchStatus' }
     });
   });
 }
 
-// 落子
-function makeMove(gameId, row, col) {
-  return ensureAuth().then(() => {
-    return wx.cloud.callFunction({
-      name: 'gameSync',
-      data: {
-        $url: 'makeMove',
-        gameId: gameId,
-        row: row,
-        col: col
-      }
-    });
+// 落子（带 requestId 幂等）
+function makeMove(gameId, row, col, sessionId) {
+  const requestId = requestIdUtil.genRequestId();
+  return callGameSync('makeMove', {
+    gameId, row, col, sessionId, requestId
   });
 }
 
-// 请求悔棋
+// 请求悔棋（带 requestId 幂等）
 function requestUndo(gameId, targetMoveNumber) {
-  return ensureAuth().then(() => {
-    return wx.cloud.callFunction({
-      name: 'gameSync',
-      data: {
-        $url: 'requestUndo',
-        gameId: gameId,
-        targetMoveNumber: targetMoveNumber
-      }
-    });
+  const requestId = requestIdUtil.genRequestId();
+  return callGameSync('requestUndo', {
+    gameId, targetMoveNumber, requestId
   });
 }
 
-// 处理悔棋请求
-function handleUndoRequest(requestId, approve) {
-  return ensureAuth().then(() => {
-    return wx.cloud.callFunction({
-      name: 'gameSync',
-      data: {
-        $url: 'handleUndo',
-        requestId: requestId,
-        approve: approve
-      }
-    });
+// 处理悔棋请求（带 idemRequestId 幂等）
+function handleUndoRequest(undoRequestId, approve) {
+  const idemRequestId = requestIdUtil.genRequestId();
+  return callGameSync('handleUndo', {
+    requestId: undoRequestId,
+    idemRequestId,
+    approve
   });
 }
 
-// 认输
+// 认输（带 requestId 幂等）
 function resignGame(gameId) {
-  return ensureAuth().then(() => {
-    return wx.cloud.callFunction({
-      name: 'gameSync',
-      data: {
-        $url: 'resignGame',
-        gameId: gameId
-      }
-    });
-  });
+  const requestId = requestIdUtil.genRequestId();
+  return callGameSync('resignGame', { gameId, requestId });
 }
 
-// 获取游戏状态
-function getGameStatus(gameId) {
-  return ensureAuth().then(() => {
-    return wx.cloud.callFunction({
-      name: 'gameSync',
-      data: {
-        $url: 'getGameStatus',
-        gameId: gameId
-      }
-    });
-  });
+// 获取游戏状态（绑定 session）
+function getGameStatus(gameId, sessionId) {
+  return callGameSync('getGameStatus', { gameId, sessionId });
 }
 
-// 实时监听游戏状态（使用云数据库watch）
+// 心跳
+function heartbeat(gameId, sessionId) {
+  return callGameSync('heartbeat', { gameId, sessionId });
+}
+
+// 发起再来一局邀请
+function inviteRematch(gameId) {
+  return callGameSync('inviteRematch', { gameId });
+}
+
+// 响应再来一局邀请
+function respondRematch(invitationId, accept) {
+  return callGameSync('respondRematch', { invitationId, accept });
+}
+
+// 获取最近战绩
+function getRecentGames() {
+  return callGameSync('getRecentGames', {});
+}
+
+// ===== 实时监听 =====
+
+// 监听对局文档变化（games 集合）
 function watchGame(gameId, callback) {
   return ensureAuth().then(() => {
-    const db = wx.cloud.database();
-    const watcher = db.collection('games').doc(gameId).watch({
+    const database = wx.cloud.database();
+    const watcher = database.collection('games').doc(gameId).watch({
       onChange: (snapshot) => {
-        if (snapshot.type === 'init') {
-          // 初始化
-          callback(null, snapshot.docs[0]);
-        } else if (snapshot.type === 'update') {
-          // 更新
-          callback(null, snapshot.docs[0]);
+        if (snapshot.docs && snapshot.docs.length > 0) {
+          callback(null, snapshot.docs[0], snapshot.type || 'init');
         }
       },
       onError: (err) => {
         callback(err, null);
       }
     });
-    
     return watcher;
   });
 }
 
-// 监听悔棋请求
-function watchUndoRequests(gameId, player, callback) {
+// 监听悔棋请求（对手发起的 pending 请求）
+function watchUndoRequests(gameId, myColor, callback) {
   return ensureAuth().then(() => {
-    const db = wx.cloud.database();
-    const watcher = db.collection('undo_requests')
+    const database = wx.cloud.database();
+    const opponentColor = myColor === 'black' ? 'white' : 'black';
+    const watcher = database.collection('undo_requests')
       .where({
         game_id: gameId,
-        requester: player === 'black' ? 'white' : 'black', // 监听对手的悔棋请求
+        requester: opponentColor,
         status: 'pending'
       })
       .watch({
         onChange: (snapshot) => {
-          if (snapshot.type === 'init' && snapshot.docs.length > 0) {
-            // 有新的悔棋请求
-            callback(null, snapshot.docs);
-          } else if (snapshot.type === 'update' && snapshot.docs.length > 0) {
-            // 悔棋请求状态更新
-            callback(null, snapshot.docs);
-          } else if (snapshot.type === 'update' && snapshot.docs.length === 0) {
-            // 悔棋请求被处理
-            callback(null, []);
-          }
+          callback(null, snapshot.docs || []);
         },
         onError: (err) => {
           callback(err, null);
         }
       });
-    
     return watcher;
   });
 }
 
+// 监听最近落子（moves 集合，取最新一条）
+function watchMoves(gameId, callback) {
+  return ensureAuth().then(() => {
+    const database = wx.cloud.database();
+    const watcher = database.collection('moves')
+      .where({ game_id: gameId, is_undo: false })
+      .orderBy('move_number', 'desc')
+      .limit(1)
+      .watch({
+        onChange: (snapshot) => {
+          callback(null, (snapshot.docs && snapshot.docs[0]) || null);
+        },
+        onError: (err) => {
+          callback(err, null);
+        }
+      });
+    return watcher;
+  });
+}
+
+// 复合订阅：games + moves + undo_requests
+// 返回 { close } 用于统一关闭所有 watcher
+function watchGameAll(gameId, myColor, handlers) {
+  const watchers = [];
+  let closed = false;
+
+  const promises = [
+    watchGame(gameId, handlers.onGame || function () {}),
+    watchMoves(gameId, handlers.onMove || function () {}),
+    watchUndoRequests(gameId, myColor, handlers.onUndo || function () {})
+  ];
+
+  Promise.all(promises).then(results => {
+    if (closed) {
+      // 在订阅完成前已关闭
+      results.forEach(w => { try { w.close(); } catch (e) {} });
+      return;
+    }
+    results.forEach(w => watchers.push(w));
+  }).catch(err => {
+    if (handlers.onError) handlers.onError(err);
+  });
+
+  return {
+    close() {
+      closed = true;
+      watchers.forEach(w => { try { w.close(); } catch (e) {} });
+      watchers.length = 0;
+    }
+  };
+}
+
+// 监听再来一局邀请（发给自己的）
+function watchInvitations(myOpenid, callback) {
+  return ensureAuth().then(() => {
+    const database = wx.cloud.database();
+    const watcher = database.collection('game_invitations')
+      .where({ to_openid: myOpenid, status: 'pending' })
+      .watch({
+        onChange: (snapshot) => {
+          callback(null, snapshot.docs || []);
+        },
+        onError: (err) => {
+          callback(err, null);
+        }
+      });
+    return watcher;
+  });
+}
+
+// 监听匹配队列自己的文档
+function watchMatchQueue(myOpenid, callback) {
+  return ensureAuth().then(() => {
+    const database = wx.cloud.database();
+    const watcher = database.collection('match_queue')
+      .where({ openid: myOpenid, status: database.command.in(['waiting', 'matched']) })
+      .watch({
+        onChange: (snapshot) => {
+          callback(null, (snapshot.docs && snapshot.docs[0]) || null);
+        },
+        onError: (err) => {
+          callback(err, null);
+        }
+      });
+    return watcher;
+  });
+}
+
+// ===== 玩家相关 =====
+
 // 获取玩家统计信息
 function getPlayerStats(openid) {
   return ensureAuth().then(() => {
-    const db = wx.cloud.database();
-    return db.collection('players').where({
-      openid: openid
-    }).get();
+    const database = wx.cloud.database();
+    return database.collection('players').where({ openid }).get();
   });
 }
 
@@ -210,25 +285,20 @@ function getPlayerStats(openid) {
 function updatePlayerInfo(playerInfo) {
   return ensureAuth().then(() => {
     const { openid, nickname, avatar, elo_rating } = playerInfo;
-    
     return wx.cloud.callFunction({
       name: 'matchSystem',
       data: {
         $url: 'updatePlayer',
-        openid: openid,
-        nickname: nickname,
-        avatar: avatar,
+        openid, nickname, avatar,
         elo_rating: elo_rating || 1200
       }
     });
   });
 }
 
-// 获取匹配统计
+// 获取匹配统计（占位）
 function getMatchStats() {
   return ensureAuth().then(() => {
-    // 这里可以调用云函数获取实时匹配统计
-    // 暂时返回模拟数据
     return Promise.resolve({
       totalWaiting: Math.floor(Math.random() * 10) + 1,
       avgWaitTime: Math.floor(Math.random() * 30) + 10,
@@ -243,22 +313,32 @@ module.exports = {
   cancelMatch,
   getMatchStatus,
   getMatchStats,
-  
+
   // 游戏相关
   makeMove,
   requestUndo,
   handleUndoRequest,
   resignGame,
   getGameStatus,
-  
+  heartbeat,
+
+  // 再来一局
+  inviteRematch,
+  respondRematch,
+  getRecentGames,
+
   // 实时监听
   watchGame,
+  watchMoves,
   watchUndoRequests,
-  
+  watchGameAll,
+  watchInvitations,
+  watchMatchQueue,
+
   // 玩家相关
   getPlayerStats,
   updatePlayerInfo,
-  
+
   // 工具函数
   ensureAuth
 };

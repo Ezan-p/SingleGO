@@ -1,133 +1,147 @@
-// 匹配页面
+// 匹配页面 — watch 实时同步
 const app = getApp();
 const rank = require('../../utils/rank.js');
+const onlineMatch = require('../../utils/online-match.js');
+
+// 匹配范围档位（与 matchChecker 对齐）
+// 0-20s 同段位、20-45s ±1段、45-90s ±2段、90s+ ±4段
+function getMatchRangeText(waitingTime) {
+  if (waitingTime < 20) return '同段位';
+  if (waitingTime < 45) return '相邻段位';
+  if (waitingTime < 90) return '±2 段位';
+  return '全部段位';
+}
 
 Page({
   data: {
-    matched: false,           // 是否匹配成功
-    waitingTime: 0,           // 等待时间（秒）
-    opponentInfo: null,       // 对手信息
-    myColor: 'black',         // 我的棋子颜色
-    countdown: 3,             // 倒计时
-    stats: null,              // 匹配统计
-    matchId: null,            // 匹配记录ID
-    gameId: null,             // 游戏ID
-    matchTimer: null,         // 等待计时器
-    countdownTimer: null,     // 倒计时计时器
-    myRankName: ''            // 我的段位
+    matched: false,
+    waitingTime: 0,
+    matchRange: '同段位',
+    opponentInfo: null,
+    myColor: 'black',
+    countdown: 3,
+    gameId: null,
+    matchTimer: null,
+    countdownTimer: null,
+    myRankName: '',
+    joining: false,
+    matchQueueWatcher: null
   },
 
-  onLoad: function(options) {
-    this.setData({ myRankName: rank.getRankName(app.globalData.rankPoints) });
+  onLoad: function () {
+    this.setData({ myRankName: rank.getRankName(app.globalData.rankPoints || 0) });
     this.startMatch();
   },
 
-  onUnload: function() {
-    // 清理计时器
+  onUnload: function () {
     this.clearTimers();
-    
-    // 如果页面关闭时仍在匹配中，取消匹配
-    if (!this.data.matched && this.data.matchId) {
-      this.cancelMatch();
+    this.closeWatcher();
+    // 页面关闭时若仍在匹配中，取消匹配
+    if (!this.data.matched && !this.data.joining) {
+      onlineMatch.cancelMatch().catch(() => {});
     }
   },
 
   // 开始匹配
-  startMatch: function() {
-    wx.showLoading({ title: '加入匹配队列...' });
-    
-    // 调用云函数加入匹配队列
-    wx.cloud.callFunction({
-      name: 'matchSystem',
-      data: {}
-    }).then(res => {
-      wx.hideLoading();
-      
-      if (res.result.code === 200) {
-        this.setData({
-          matchId: res.result.data._id
-        });
-        
-        // 开始等待计时器
+  startMatch: function () {
+    if (this.data.joining) return;
+    this.setData({ joining: true });
+
+    onlineMatch.joinMatchQueue().then((res) => {
+      this.setData({ joining: false });
+      if (res.result && res.result.code === 200) {
         this.startMatchTimer();
-        
-        // 开始轮询匹配状态
-        this.pollMatchStatus();
-        
-        wx.showToast({ title: '已加入匹配队列', icon: 'success' });
+        this.startWatchMatchQueue();
       } else {
-        wx.showToast({ title: res.result.message || '加入匹配失败', icon: 'none' });
-        setTimeout(() => wx.navigateBack(), 1500);
+        const msg = (res.result && res.result.message) || '加入匹配失败';
+        wx.showToast({ title: msg, icon: 'none' });
+        // 若已在队列中，继续监听
+        if (res.result && res.result.code === 400) {
+          this.startMatchTimer();
+          this.startWatchMatchQueue();
+        } else {
+          setTimeout(() => wx.navigateBack(), 1500);
+        }
       }
-    }).catch(err => {
-      wx.hideLoading();
-      wx.showToast({ title: '网络错误', icon: 'none' });
+    }).catch((err) => {
+      this.setData({ joining: false });
       console.error('加入匹配失败:', err);
+      wx.showToast({ title: '网络错误', icon: 'none' });
+      setTimeout(() => wx.navigateBack(), 1500);
     });
   },
 
-  // 开始匹配计时器
-  startMatchTimer: function() {
-    this.setData({ waitingTime: 0 });
-    
-    this.data.matchTimer = setInterval(() => {
-      this.setData({
-        waitingTime: this.data.waitingTime + 1
-      });
-      
-      // 每10秒更新一次统计
-      if (this.data.waitingTime % 10 === 0) {
-        this.updateMatchStats();
+  // 监听匹配队列文档（替代轮询）
+  startWatchMatchQueue: function () {
+    const openid = app.globalData.openid;
+    if (!openid) return;
+    onlineMatch.watchMatchQueue(openid, (err, matchRecord) => {
+      if (err) {
+        console.error('watch match_queue error', err);
+        // 出错后回退到轮询
+        this.fallbackPoll();
+        return;
       }
-    }, 1000);
+      if (!matchRecord) {
+        // 队列记录消失（被取消或超时清理）
+        if (!this.data.matched) {
+          wx.showToast({ title: '匹配已结束', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 1200);
+        }
+        return;
+      }
+      if (matchRecord.status === 'matched' && matchRecord.matched_game_id) {
+        this.loadMatchedGame(matchRecord.matched_game_id);
+      }
+    }).then((watcher) => {
+      this.data.matchQueueWatcher = watcher;
+    }).catch((err) => {
+      console.error('startWatchMatchQueue failed', err);
+      this.fallbackPoll();
+    });
   },
 
-  // 轮询匹配状态
-  pollMatchStatus: function() {
-    if (this.data.matched || !this.data.matchId) return;
-    
-    wx.cloud.callFunction({
-      name: 'matchSystem',
-      data: {
-        $url: 'getMatchStatus'
-      }
-    }).then(res => {
-      if (res.result.code === 200) {
-        const data = res.result.data;
-        
-        if (data.game) {
-          // 匹配成功
-          this.onMatchSuccess(data.match, data.game);
-        } else {
-          // 仍在匹配中，1秒后继续轮询
-          setTimeout(() => this.pollMatchStatus(), 1000);
+  // 回退轮询（watch 不可用时）
+  fallbackPoll: function () {
+    if (this.data.matched || this.data._polling) return;
+    this.data._polling = true;
+    const poll = () => {
+      if (this.data.matched) return;
+      onlineMatch.getMatchStatus().then((res) => {
+        if (res.result && res.result.code === 200 && res.result.data && res.result.data.match) {
+          const m = res.result.data.match;
+          if (m.status === 'matched' && m.matched_game_id) {
+            this.loadMatchedGame(m.matched_game_id);
+            return;
+          }
         }
-      } else {
-        // 匹配失败或已取消
-        if (res.result.code === 404) {
-          wx.showToast({ title: '匹配已取消', icon: 'none' });
-          setTimeout(() => wx.navigateBack(), 1500);
-        } else {
-          // 1秒后重试
-          setTimeout(() => this.pollMatchStatus(), 1000);
-        }
+        setTimeout(poll, 1500);
+      }).catch(() => {
+        setTimeout(poll, 1500);
+      });
+    };
+    poll();
+  },
+
+  // 加载匹配成功的游戏
+  loadMatchedGame: function (gameId) {
+    const db = wx.cloud.database();
+    db.collection('games').doc(gameId).get().then((res) => {
+      if (res.data) {
+        this.onMatchSuccess(res.data);
       }
-    }).catch(err => {
-      console.error('轮询匹配状态失败:', err);
-      // 1秒后重试
-      setTimeout(() => this.pollMatchStatus(), 1000);
+    }).catch((err) => {
+      console.error('加载游戏失败', err);
     });
   },
 
   // 匹配成功
-  onMatchSuccess: function(matchRecord, game) {
+  onMatchSuccess: function (game) {
     this.clearTimers();
-    
-    // 确定我的棋子颜色
+    this.closeWatcher();
+
     const myOpenid = app.globalData.openid;
     const isBlack = game.black_openid === myOpenid;
-    
-    // 获取对手信息
     const opponentInfo = isBlack ? {
       nickname: game.white_nickname,
       avatar: game.white_avatar,
@@ -137,36 +151,45 @@ Page({
       avatar: game.black_avatar,
       rankName: game.black_rank_name || ''
     };
-    
+
     this.setData({
       matched: true,
       myColor: isBlack ? 'black' : 'white',
-      opponentInfo: opponentInfo,
+      opponentInfo,
       gameId: game._id
     });
-    
-    // 开始倒计时
+
     this.startCountdown();
   },
 
-  // 开始倒计时
-  startCountdown: function() {
+  // 等待计时器
+  startMatchTimer: function () {
+    this.setData({ waitingTime: 0, matchRange: '同段位' });
+    this.data.matchTimer = setInterval(() => {
+      const t = this.data.waitingTime + 1;
+      this.setData({
+        waitingTime: t,
+        matchRange: getMatchRangeText(t)
+      });
+    }, 1000);
+  },
+
+  // 倒计时
+  startCountdown: function () {
     this.setData({ countdown: 3 });
-    
     this.data.countdownTimer = setInterval(() => {
-      const newCountdown = this.data.countdown - 1;
-      
-      if (newCountdown <= 0) {
+      const n = this.data.countdown - 1;
+      if (n <= 0) {
         this.clearTimers();
         this.startGame();
       } else {
-        this.setData({ countdown: newCountdown });
+        this.setData({ countdown: n });
       }
     }, 1000);
   },
 
   // 取消匹配
-  onCancelMatch: function() {
+  onCancelMatch: function () {
     wx.showModal({
       title: '提示',
       content: '确定要取消匹配吗？',
@@ -178,69 +201,45 @@ Page({
     });
   },
 
-  // 取消匹配
-  cancelMatch: function() {
+  cancelMatch: function () {
     this.clearTimers();
-    
-    wx.showLoading({ title: '取消中...' });
-    
-    wx.cloud.callFunction({
-      name: 'matchSystem',
-      data: {
-        $url: 'cancelMatch'
-      }
-    }).then(res => {
-      wx.hideLoading();
-      
-      if (res.result.code === 200) {
+    this.closeWatcher();
+    onlineMatch.cancelMatch().then((res) => {
+      if (res.result && res.result.code === 200) {
         wx.showToast({ title: '已取消匹配', icon: 'success' });
-        setTimeout(() => wx.navigateBack(), 1000);
-      } else {
-        wx.showToast({ title: res.result.message || '取消匹配失败', icon: 'none' });
       }
-    }).catch(err => {
-      wx.hideLoading();
-      wx.showToast({ title: '网络错误', icon: 'none' });
-      console.error('取消匹配失败:', err);
+      setTimeout(() => wx.navigateBack(), 800);
+    }).catch(() => {
+      wx.showToast({ title: '取消失败', icon: 'none' });
+      setTimeout(() => wx.navigateBack(), 1000);
     });
   },
 
-  // 立即开始游戏
-  onStartGame: function() {
+  // 立即开始
+  onStartGame: function () {
     this.clearTimers();
     this.startGame();
   },
 
-  // 开始游戏
-  startGame: function() {
+  startGame: function () {
     if (!this.data.gameId) return;
-    
-    // 跳转到游戏页面
     wx.redirectTo({
-      url: `/pages/game-online/index?gameId=${this.data.gameId}`
+      url: '/pages/game-online/index?gameId=' + this.data.gameId
     });
   },
 
-  // 更新匹配统计
-  updateMatchStats: function() {
-    // 这里可以调用云函数获取实时统计信息
-    // 暂时使用模拟数据
-    this.setData({
-      stats: {
-        totalWaiting: Math.floor(Math.random() * 10) + 1,
-        avgWaitTime: Math.floor(Math.random() * 30) + 10,
-        matchSuccessRate: 95
-      }
-    });
+  closeWatcher: function () {
+    if (this.data.matchQueueWatcher) {
+      try { this.data.matchQueueWatcher.close(); } catch (e) {}
+      this.data.matchQueueWatcher = null;
+    }
   },
 
-  // 清理计时器
-  clearTimers: function() {
+  clearTimers: function () {
     if (this.data.matchTimer) {
       clearInterval(this.data.matchTimer);
       this.data.matchTimer = null;
     }
-    
     if (this.data.countdownTimer) {
       clearInterval(this.data.countdownTimer);
       this.data.countdownTimer = null;

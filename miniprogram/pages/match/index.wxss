@@ -1,6 +1,6 @@
 .match-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: radial-gradient(ellipse at 50% 0%, #5C3A1E 0%, #3D2410 55%, #2A1808 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -12,10 +12,11 @@
 .match-container {
   width: 100%;
   max-width: 600rpx;
-  background: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(135deg, #C8923C 0%, #8B5A2B 100%);
+  border: 1px solid rgba(232, 184, 112, 0.4);
   border-radius: 24rpx;
   padding: 60rpx 40rpx;
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.4);
   text-align: center;
 }
 
@@ -35,7 +36,7 @@
   width: 20rpx;
   height: 20rpx;
   border-radius: 50%;
-  background: #667eea;
+  background: #E8B870;
   animation: bounce 1.4s infinite ease-in-out both;
 }
 
@@ -63,21 +64,28 @@
 .searching-text {
   font-size: 36rpx;
   font-weight: 600;
-  color: #333;
+  color: #FFF8E8;
   display: block;
   margin-bottom: 16rpx;
 }
 
 .waiting-time {
   font-size: 28rpx;
-  color: #666;
+  color: rgba(255, 248, 232, 0.7);
   display: block;
   margin-bottom: 16rpx;
 }
 
 .my-rank-text {
   font-size: 26rpx;
-  color: #667eea;
+  color: #E8B870;
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.match-range-text {
+  font-size: 24rpx;
+  color: rgba(255, 248, 232, 0.55);
   display: block;
   margin-bottom: 40rpx;
 }
@@ -88,8 +96,8 @@
   justify-content: space-around;
   margin: 40rpx 0;
   padding: 30rpx 0;
-  border-top: 2rpx solid #eee;
-  border-bottom: 2rpx solid #eee;
+  border-top: 2rpx solid rgba(232, 184, 112, 0.25);
+  border-bottom: 2rpx solid rgba(232, 184, 112, 0.25);
 }
 
 .stat-item {
@@ -101,13 +109,13 @@
 .stat-value {
   font-size: 40rpx;
   font-weight: 700;
-  color: #667eea;
+  color: #E8B870;
   margin-bottom: 8rpx;
 }
 
 .stat-label {
   font-size: 24rpx;
-  color: #666;
+  color: rgba(255, 248, 232, 0.6);
 }
 
 /* 取消按钮 */
@@ -132,10 +140,11 @@
 .match-success {
   width: 100%;
   max-width: 600rpx;
-  background: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(135deg, #C8923C 0%, #8B5A2B 100%);
+  border: 1px solid rgba(232, 184, 112, 0.4);
   border-radius: 24rpx;
   padding: 60rpx 40rpx;
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.2);
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.4);
   text-align: center;
 }
 
@@ -155,13 +164,14 @@
 .success-title {
   font-size: 44rpx;
   font-weight: 700;
-  color: #333;
+  color: #FFF8E8;
   margin-bottom: 50rpx;
 }
 
 /* 对手信息 */
 .opponent-info {
-  background: #f8f9fa;
+  background: rgba(58, 38, 20, 0.6);
+  border: 1px solid rgba(232, 184, 112, 0.25);
   border-radius: 20rpx;
   padding: 30rpx;
   margin-bottom: 40rpx;
@@ -175,25 +185,25 @@
   height: 120rpx;
   border-radius: 50%;
   margin-bottom: 20rpx;
-  border: 4rpx solid #667eea;
+  border: 4rpx solid #E8B870;
 }
 
 .opponent-name {
   font-size: 36rpx;
   font-weight: 600;
-  color: #333;
+  color: #FFF8E8;
   margin-bottom: 8rpx;
 }
 
 .opponent-rank-badge {
-  background: rgba(102, 126, 234, 0.15);
+  background: rgba(232, 184, 112, 0.15);
   padding: 6rpx 20rpx;
   border-radius: 16rpx;
 }
 
 .opponent-rank-text {
   font-size: 24rpx;
-  color: #667eea;
+  color: #E8B870;
   font-weight: 500;
 }
 
@@ -204,7 +214,7 @@
 
 .color-label {
   font-size: 28rpx;
-  color: #666;
+  color: rgba(255, 248, 232, 0.7);
   margin-bottom: 20rpx;
   display: block;
 }
@@ -236,7 +246,7 @@
 .color-text {
   font-size: 32rpx;
   font-weight: 600;
-  color: #333;
+  color: #FFF8E8;
 }
 
 /* 倒计时 */
@@ -246,7 +256,7 @@
 
 .countdown-label {
   font-size: 28rpx;
-  color: #666;
+  color: rgba(255, 248, 232, 0.7);
   display: block;
   margin-bottom: 16rpx;
 }
@@ -254,7 +264,7 @@
 .countdown-number {
   font-size: 80rpx;
   font-weight: 700;
-  color: #667eea;
+  color: #E8B870;
   display: block;
 }
 

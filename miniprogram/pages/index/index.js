@@ -30,7 +30,7 @@ Page({
     wx.navigateTo({ url: '/pages/room/room' })
   },
   onOnlineBattle() {
-    wx.navigateTo({ url: '/pages/match/index' })
+    wx.navigateTo({ url: '/pages/lobby/index' })
   },
   onAIBattle() {
     wx.navigateTo({ url: '/pages/ai-setup/ai-setup' })

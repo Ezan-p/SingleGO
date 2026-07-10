@@ -52,8 +52,23 @@ async function getPlayerInfo(openid) {
   }
 }
 
-// 加入匹配队列
+// 主分发：根据 event.$url 路由到子函数；无 $url 时默认加入匹配队列
 exports.main = async (event, context) => {
+  const action = event.$url || event.action;
+  if (action && action !== 'main' && typeof exports[action] === 'function') {
+    try {
+      return await exports[action](event, context);
+    } catch (err) {
+      console.error(`[matchSystem.${action}] error:`, err);
+      return { code: 500, message: '服务器错误: ' + (err.message || err), data: null };
+    }
+  }
+  // 默认：加入匹配队列
+  return exports.joinMatch(event, context);
+};
+
+// 加入匹配队列
+exports.joinMatch = async (event, context) => {
   const wxContext = cloud.getWXContext();
   const openid = wxContext.OPENID;
   

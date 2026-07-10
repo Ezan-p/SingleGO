@@ -1,0 +1,126 @@
+.records-page {
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 50% 0%, #5C3A1E 0%, #3D2410 55%, #2A1808 100%);
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.empty-text {
+  font-size: 30rpx;
+  color: rgba(255, 248, 232, 0.55);
+}
+
+.record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.record-item {
+  background: linear-gradient(135deg, #C8923C 0%, #8B5A2B 100%);
+  border-radius: 20rpx;
+  padding: 28rpx;
+  border-left: 8rpx solid #E8B870;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.3);
+}
+
+.record-win {
+  border-left-color: #A5D6A7;
+}
+
+.record-loss {
+  border-left-color: #EF9A9A;
+}
+
+.record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.record-result {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #FFF8E8;
+}
+
+.record-win .record-result {
+  color: #A5D6A7;
+}
+
+.record-loss .record-result {
+  color: #EF9A9A;
+}
+
+.record-time {
+  font-size: 22rpx;
+  color: rgba(255, 248, 232, 0.55);
+}
+
+.record-body {
+  border-top: 1rpx solid rgba(255, 248, 232, 0.15);
+  padding-top: 16rpx;
+}
+
+.record-row {
+  display: flex;
+  margin-bottom: 10rpx;
+}
+
+.record-label {
+  font-size: 26rpx;
+  color: rgba(255, 248, 232, 0.6);
+  width: 80rpx;
+  flex-shrink: 0;
+}
+
+.record-value {
+  font-size: 26rpx;
+  color: #FFF8E8;
+  flex: 1;
+}
+
+.record-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid rgba(255, 248, 232, 0.15);
+}
+
+.record-points {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.points-up {
+  color: #A5D6A7;
+}
+
+.points-down {
+  color: #EF9A9A;
+}
+
+.record-rank {
+  font-size: 24rpx;
+  color: #E8B870;
+  background: rgba(232, 184, 112, 0.15);
+  padding: 4rpx 16rpx;
+  border-radius: 12rpx;
+}
+
+.loading {
+  text-align: center;
+  padding: 40rpx;
+  color: rgba(255, 248, 232, 0.55);
+  font-size: 26rpx;
+}

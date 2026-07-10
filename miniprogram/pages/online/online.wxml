@@ -43,6 +43,7 @@
         <view wx:if="{{item.v === 1}}" class="stone stone-black"></view>
         <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
         <view wx:if="{{item.isLast}}" class="last-marker"></view>
+        <view wx:if="{{item.isPending}}" class="preview {{pendingColor === 1 ? 'preview-black' : 'preview-white'}}"></view>
       </view>
     </view>
   </view>

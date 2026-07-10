@@ -1,0 +1,38 @@
+<view class="records-page">
+  <view class="empty" wx:if="{{!loading && games.length === 0}}">
+    <text class="empty-text">暂无对局记录</text>
+  </view>
+
+  <view class="record-list" wx:if="{{games.length > 0}}">
+    <view class="record-item {{item.won ? 'record-win' : 'record-loss'}}" wx:for="{{games}}" wx:key="gameId">
+      <view class="record-header">
+        <text class="record-result">{{item.won ? '胜' : '负'}}</text>
+        <text class="record-time">{{item.timeText}}</text>
+      </view>
+      <view class="record-body">
+        <view class="record-row">
+          <text class="record-label">对手</text>
+          <text class="record-value">{{item.opponent || '未知'}}（{{item.opponentRank || '棋童'}}）</text>
+        </view>
+        <view class="record-row">
+          <text class="record-label">方式</text>
+          <text class="record-value">{{item.reasonText}}</text>
+        </view>
+        <view class="record-row" wx:if="{{item.moveCount}}">
+          <text class="record-label">步数</text>
+          <text class="record-value">{{item.moveCount}} 手</text>
+        </view>
+      </view>
+      <view class="record-footer">
+        <text class="record-points {{item.pointsDelta >= 0 ? 'points-up' : 'points-down'}}">
+          {{item.pointsDelta >= 0 ? '+' : ''}}{{item.pointsDelta}} 积分
+        </text>
+        <text class="record-rank">{{item.rankName}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+</view>

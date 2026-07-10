@@ -1,6 +1,8 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/lobby/index",
+    "pages/records/index",
     "pages/room/room",
     "pages/online/online",
     "pages/match/index",

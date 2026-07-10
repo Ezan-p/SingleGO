@@ -18,6 +18,7 @@ Page({
     mockAdCountdown: 3, // 模拟广告倒计时
     showRules: false,
     lastMove: null, // {r, c}
+    pendingColor: 0, // 预览落子的颜色（1=黑, 2=白），用于两下落子交互
     sizeOptions: ['13×13', '15×15', '19×19'],
     sizeIndex: 1, // 默认 15×15
     boardPx: 0, // 棋盘像素尺寸（正方形边长）
@@ -32,6 +33,7 @@ Page({
   // this.history    — [{r,c,player}] 悔棋历史
   // this.starSet    — {key: true} 星位查找表
   // this._pendingUndo — 待执行的悔棋操作（观看广告后执行）
+  // this.pendingCell — 两下落子：当前预览中的交叉点 {r,c}，null 表示无预览
 
   onLoad: function (options) {
     let size = dango.DEFAULT_SIZE;
@@ -88,6 +90,7 @@ Page({
     const gridPx = size * cellPx;
     // 构建交叉点数据
     const cells = this.buildCells(null);
+    this.pendingCell = null;
     // 一次性 setData，避免中间态
     this.setData({
       boardSize: size,
@@ -100,6 +103,7 @@ Page({
       undoCount: undoManager.getCount(),
       showUndoAdModal: false,
       lastMove: null,
+      pendingColor: 0,
       cellPx: cellPx,
       halfCellPx: halfCellPx,
       gridPx: gridPx,
@@ -122,6 +126,7 @@ Page({
           v: this.board[r][c],
           isStar: isStar,
           isLast: isLast,
+          isPending: false,
           isWinTarget: false,
           isWinStone: false
         });
@@ -130,7 +135,7 @@ Page({
     return cells;
   },
 
-  // 点击交叉点落子
+  // 点击交叉点：两下落子（先预览，再确认）
   onCellTap: function (e) {
     if (this.data.gameOver) {
       wx.showToast({ title: '游戏已结束', icon: 'none', duration: 800 });
@@ -138,14 +143,52 @@ Page({
     }
     const r = e.currentTarget.dataset.r;
     const c = e.currentTarget.dataset.c;
+    // 越界或已有棋子：取消预览并给出提示
     if (!dango.canPlace(this.board, r, c)) {
-      // 已有棋子时给出提示；越界静默忽略
+      if (this.pendingCell) this.clearPending();
       if (dango.inBounds(r, c, this.board.length) && this.board[r][c] !== dango.EMPTY) {
         wx.showToast({ title: '此处已有棋子', icon: 'none', duration: 800 });
       }
       return;
     }
-    this.placePiece(r, c);
+    if (this.pendingCell) {
+      if (this.pendingCell.r === r && this.pendingCell.c === c) {
+        // 再次点击同一交叉点 → 确认落子
+        const pr = r, pc = c;
+        this.clearPending();
+        this.placePiece(pr, pc);
+      } else {
+        // 点击另一个空点 → 移动预览位置
+        this.setPending(r, c);
+      }
+    } else {
+      this.setPending(r, c);
+    }
+  },
+
+  // 设置预览交叉点（半透明棋形提示）
+  setPending: function (r, c) {
+    const size = this.data.boardSize;
+    const updates = {};
+    if (this.pendingCell) {
+      updates['cells[' + (this.pendingCell.r * size + this.pendingCell.c) + '].isPending'] = false;
+    }
+    updates['cells[' + (r * size + c) + '].isPending'] = true;
+    updates.pendingColor = this.data.currentPlayer;
+    this.pendingCell = { r: r, c: c };
+    this.setData(updates);
+  },
+
+  // 清除预览交叉点
+  clearPending: function () {
+    const size = this.data.boardSize;
+    const updates = {};
+    if (this.pendingCell) {
+      updates['cells[' + (this.pendingCell.r * size + this.pendingCell.c) + '].isPending'] = false;
+    }
+    updates.pendingColor = 0;
+    this.pendingCell = null;
+    this.setData(updates);
   },
 
   placePiece: function (r, c) {
@@ -223,6 +266,7 @@ Page({
   // 执行悔棋操作
   executeUndo: function () {
     if (this.history.length === 0) return;
+    if (this.pendingCell) this.clearPending();
     const last = this.history.pop();
     this.board[last.r][last.c] = dango.EMPTY;
     const prev = this.history[this.history.length - 1] || null;

@@ -1,3 +1,5 @@
+// gameSync — 联网对战对局同步云函数
+// 路由：event.$url 决定调用哪个子函数；exports.main 负责分发。
 const cloud = require("wx-server-sdk");
 cloud.init({
   env: cloud.DYNAMIC_CURRENT_ENV,
@@ -6,7 +8,7 @@ cloud.init({
 const db = cloud.database();
 const _ = db.command;
 
-// 段位系统配置（与 miniprogram/utils/rank.js 同步）
+// 段位系统配置（与 miniprogram/utils/rank.js 同步；KEEP IN SYNC）
 const RANKS = [
   { id: 0,  name: '棋童',     points: 0,     tier: 'beginner' },
   { id: 1,  name: '棋童一级',  points: 100,   tier: 'beginner' },
@@ -36,152 +38,362 @@ const RANKS = [
   { id: 25, name: '棋圣',      points: 35000, tier: 'master' }
 ];
 
-const ONLINE_WIN_POINTS = 30;
-const ONLINE_LOSS_POINTS = -15;
+// 心跳超时阈值（毫秒）— 超过即判掉线方负
+const HEARTBEAT_TIMEOUT_MS = 30000;
+// 每位玩家每局可发起的免费悔棋次数
+const UNDO_LIMIT_PER_PLAYER = 1;
+// ELO K 因子与上下限
+const ELO_K = 32;
+const ELO_WIN_MIN = 10, ELO_WIN_MAX = 50;
+const ELO_LOSS_MIN = -50, ELO_LOSS_MAX = -10;
 
-function getRankNameByPoints(points) {
-  points = Math.max(0, points || 0);
-  for (let i = RANKS.length - 1; i >= 0; i--) {
-    if (points >= RANKS[i].points) return RANKS[i].name;
-  }
-  return RANKS[0].name;
-}
-const { 
-  createBoard, 
-  cloneBoard, 
-  canPlace, 
+const {
+  createBoard,
+  cloneBoard,
+  canPlace,
   placePiece,
-  checkSurroundWin,
-  checkSelfSurroundLoss,
-  checkTwoRowsLoss,
-  opponent,
+  evaluateMove,
   BLACK,
-  WHITE
+  WHITE,
+  opponent
 } = require('./dango-logic');
 
-// 获取游戏详情
-async function getGame(gameId) {
+// ===== 段位辅助 =====
+function getRankIdByPoints(points) {
+  points = Math.max(0, points || 0);
+  for (let i = RANKS.length - 1; i >= 0; i--) {
+    if (points >= RANKS[i].points) return RANKS[i].id;
+  }
+  return 0;
+}
+function getRankNameByPoints(points) {
+  const id = getRankIdByPoints(points);
+  return RANKS[id].name;
+}
+
+// ===== ELO 积分变化（含不降段规则）=====
+// 返回 { delta, newPoints, oldRankId, newRankId, promoted }
+function calcPointsChange(myPoints, oppPoints, isWin) {
+  const expected = 1 / (1 + Math.pow(10, (oppPoints - myPoints) / 400));
+  let delta;
+  if (isWin) {
+    delta = Math.round(ELO_K * (1 - expected));
+    delta = Math.max(ELO_WIN_MIN, Math.min(ELO_WIN_MAX, delta));
+  } else {
+    delta = Math.round(ELO_K * (0 - expected));
+    delta = Math.max(ELO_LOSS_MIN, Math.min(ELO_LOSS_MAX, delta));
+  }
+  const oldRankId = getRankIdByPoints(myPoints);
+  let newPoints = Math.max(0, myPoints + delta);
+  const newRankIdRaw = getRankIdByPoints(newPoints);
+  let promoted = false;
+  if (newRankIdRaw > oldRankId) {
+    promoted = true;
+  } else if (newRankIdRaw < oldRankId) {
+    // 不降段：保持当前段位门槛积分
+    newPoints = Math.max(newPoints, RANKS[oldRankId].points);
+  }
+  return {
+    delta,
+    newPoints,
+    oldRankId,
+    newRankId: getRankIdByPoints(newPoints),
+    promoted
+  };
+}
+
+// ===== 幂等：request_log 去重 =====
+async function checkIdempotent(requestId) {
+  if (!requestId) return { hit: false };
   try {
-    const result = await db.collection("games").doc(gameId).get();
-    if (!result.data) {
-      throw new Error("游戏不存在");
+    const existing = await db.collection('request_log').where({ request_id: requestId }).limit(1).get();
+    if (existing.data && existing.data.length > 0) {
+      return { hit: true, result: existing.data[0].result };
     }
-    return result.data;
-  } catch (error) {
-    console.error("获取游戏失败:", error);
-    throw error;
+  } catch (e) {
+    console.error('checkIdempotent error', e);
+  }
+  return { hit: false };
+}
+async function logRequest(requestId, action, result) {
+  if (!requestId) return;
+  try {
+    await db.collection('request_log').add({
+      data: {
+        request_id: requestId,
+        action,
+        result,
+        created_at: db.serverDate()
+      }
+    });
+  } catch (e) {
+    console.error('logRequest error', e);
   }
 }
 
-// 落子函数
+// ===== 心跳超时检查（懒检查）=====
+// 返回 { disconnectedColor } 或 null
+function checkOpponentHeartbeat(game, myColor) {
+  const oppColor = myColor === 'black' ? 'white' : 'black';
+  const oppHeartbeat = game['last_heartbeat_' + oppColor];
+  if (!oppHeartbeat) return null;
+  let t;
+  try {
+    t = oppHeartbeat instanceof Date ? oppHeartbeat.getTime() : new Date(oppHeartbeat).getTime();
+  } catch (e) {
+    return null;
+  }
+  if (!t) return null;
+  const elapsed = Date.now() - t;
+  if (elapsed > HEARTBEAT_TIMEOUT_MS) return { disconnectedColor: oppColor };
+  return null;
+}
+
+// ===== 获取游戏 =====
+async function getGame(gameId) {
+  const result = await db.collection("games").doc(gameId).get();
+  if (!result.data) throw new Error("游戏不存在");
+  return result.data;
+}
+
+// ===== 验证玩家身份 =====
+function verifyPlayer(game, openid) {
+  const isBlack = game.black_openid === openid;
+  const isWhite = game.white_openid === openid;
+  if (!isBlack && !isWhite) return null;
+  return isBlack ? 'black' : 'white';
+}
+
+// ===== 结束对局（通用）=====
+async function finishGame(gameId, game, winner, reason, winTarget, winStones, winRule) {
+  const updateData = {
+    status: winner === 'black' ? 'black_win' : 'white_win',
+    winner,
+    winner_reason: reason,
+    end_time: db.serverDate(),
+    updated_at: db.serverDate()
+  };
+  if (winTarget) updateData.win_target = winTarget;
+  if (winStones) updateData.win_stones = winStones;
+  if (winRule !== undefined && winRule !== null) updateData.win_rule = winRule;
+  await db.collection('games').doc(gameId).update({ data: updateData });
+  // 更新玩家统计与积分
+  const statsResult = await updatePlayerStats(game, winner, reason);
+  // 把积分变化回写游戏文档
+  await db.collection('games').doc(gameId).update({
+    data: {
+      points_delta_black: statsResult.blackDelta,
+      points_delta_white: statsResult.whiteDelta,
+      black_rank_after: statsResult.blackRankName,
+      white_rank_after: statsResult.whiteRankName
+    }
+  });
+  return statsResult;
+}
+
+// ===== 更新玩家统计与积分（ELO + 不降段）=====
+async function updatePlayerStats(game, winner, reason) {
+  const blackId = game.black_player_id;
+  const whiteId = game.white_player_id;
+  const blackDoc = await db.collection('players').doc(blackId).get();
+  const whiteDoc = await db.collection('players').doc(whiteId).get();
+  const black = blackDoc.data || {};
+  const white = whiteDoc.data || {};
+
+  const blackPoints = black.rankPoints || 0;
+  const whitePoints = white.rankPoints || 0;
+  const blackWon = winner === 'black';
+  const whiteWon = winner === 'white';
+
+  const blackChange = calcPointsChange(blackPoints, whitePoints, blackWon);
+  const whiteChange = calcPointsChange(whitePoints, blackPoints, whiteWon);
+
+  // 黑方更新
+  const blackUpdate = {
+    total_games: _.inc(1),
+    rankPoints: blackChange.newPoints,
+    rankName: getRankNameByPoints(blackChange.newPoints),
+    updated_at: db.serverDate()
+  };
+  if (blackWon) {
+    blackUpdate.wins = _.inc(1);
+    blackUpdate.current_streak = _.inc(1);
+  } else {
+    blackUpdate.losses = _.inc(1);
+    blackUpdate.current_streak = 0;
+  }
+  // best_streak
+  const blackNewStreak = blackWon ? (black.current_streak || 0) + 1 : 0;
+  if (blackNewStreak > (black.best_streak || 0)) blackUpdate.best_streak = blackNewStreak;
+
+  // 白方更新
+  const whiteUpdate = {
+    total_games: _.inc(1),
+    rankPoints: whiteChange.newPoints,
+    rankName: getRankNameByPoints(whiteChange.newPoints),
+    updated_at: db.serverDate()
+  };
+  if (whiteWon) {
+    whiteUpdate.wins = _.inc(1);
+    whiteUpdate.current_streak = _.inc(1);
+  } else {
+    whiteUpdate.losses = _.inc(1);
+    whiteUpdate.current_streak = 0;
+  }
+  const whiteNewStreak = whiteWon ? (white.current_streak || 0) + 1 : 0;
+  if (whiteNewStreak > (white.best_streak || 0)) whiteUpdate.best_streak = whiteNewStreak;
+
+  // recent_games 摘要（最多 20 条）
+  const now = Date.now();
+  const blackSummary = {
+    gameId: game._id,
+    opponent: white.nickname || '对手',
+    opponentRank: white.rankName || '棋童',
+    won: blackWon,
+    reason,
+    pointsDelta: blackChange.delta,
+    rankName: getRankNameByPoints(blackChange.newPoints),
+    timestamp: now
+  };
+  const whiteSummary = {
+    gameId: game._id,
+    opponent: black.nickname || '对手',
+    opponentRank: black.rankName || '棋童',
+    won: whiteWon,
+    reason,
+    pointsDelta: whiteChange.delta,
+    rankName: getRankNameByPoints(whiteChange.newPoints),
+    timestamp: now
+  };
+  blackUpdate.recent_games = pushRecent(black.recent_games, blackSummary);
+  whiteUpdate.recent_games = pushRecent(white.recent_games, whiteSummary);
+
+  try { await db.collection('players').doc(blackId).update({ data: blackUpdate }); } catch (e) { console.error('更新黑方统计失败', e); }
+  try { await db.collection('players').doc(whiteId).update({ data: whiteUpdate }); } catch (e) { console.error('更新白方统计失败', e); }
+
+  return {
+    blackDelta: blackChange.delta,
+    whiteDelta: whiteChange.delta,
+    blackRankName: getRankNameByPoints(blackChange.newPoints),
+    whiteRankName: getRankNameByPoints(whiteChange.newPoints),
+    blackPromoted: blackChange.promoted,
+    whitePromoted: whiteChange.promoted
+  };
+}
+
+function pushRecent(arr, item) {
+  const list = Array.isArray(arr) ? arr.slice() : [];
+  list.unshift(item);
+  if (list.length > 20) list.length = 20;
+  return list;
+}
+
+// ===== 主分发 =====
+exports.main = async (event, context) => {
+  const action = event.$url || event.action;
+  if (action && typeof exports[action] === 'function' && action !== 'main') {
+    try {
+      return await exports[action](event, context);
+    } catch (err) {
+      console.error(`[gameSync.${action}] error:`, err);
+      return { code: 500, message: '服务器错误: ' + (err.message || err), data: null };
+    }
+  }
+  return { code: 400, message: '未知操作: ' + action, data: null };
+};
+
+// ===== 落子 =====
 exports.makeMove = async (event, context) => {
-  const { gameId, row, col } = event;
+  const { gameId, row, col, requestId, sessionId } = event;
   const wxContext = cloud.getWXContext();
   const openid = wxContext.OPENID;
-  
+
+  // 幂等检查
+  const idem = await checkIdempotent(requestId);
+  if (idem.hit) return idem.result;
+
   try {
-    // 获取游戏信息
     const game = await getGame(gameId);
-    
-    // 验证玩家身份
-    const isBlackPlayer = game.black_openid === openid;
-    const isWhitePlayer = game.white_openid === openid;
-    
-    if (!isBlackPlayer && !isWhitePlayer) {
-      return {
-        code: 403,
-        message: "您不是该游戏的玩家",
-        data: null
-      };
+
+    // 玩家身份
+    const myColor = verifyPlayer(game, openid);
+    if (!myColor) return { code: 403, message: '您不是该游戏的玩家', data: null };
+
+    // 多设备 session 校验
+    if (sessionId && game[myColor + '_session'] && game[myColor + '_session'] !== sessionId) {
+      return { code: 409, message: '已在其他设备登录', data: null };
     }
-    
-    // 验证当前回合
-    const currentPlayer = game.current_player;
-    const isPlayerTurn = (currentPlayer === "black" && isBlackPlayer) || 
-                        (currentPlayer === "white" && isWhitePlayer);
-    
-    if (!isPlayerTurn) {
-      return {
-        code: 400,
-        message: "现在不是您的回合",
-        data: null
-      };
+
+    // 对局状态
+    if (game.status !== 'playing') {
+      return { code: 400, message: '对局已结束', data: null };
     }
-    
-    // 验证落子位置
+
+    // 回合校验
+    if (game.current_player !== myColor) {
+      return { code: 400, message: '现在不是您的回合', data: null };
+    }
+
+    // 位置校验
     if (!canPlace(game.board_state, row, col)) {
-      return {
-        code: 400,
-        message: "该位置不能落子",
-        data: null
-      };
+      return { code: 400, message: '该位置不能落子', data: null };
     }
-    
-    // 复制棋盘状态
+
+    // 落子
     const newBoard = cloneBoard(game.board_state);
-    const playerPiece = currentPlayer === "black" ? BLACK : WHITE;
-    const opponentPiece = currentPlayer === "black" ? WHITE : BLACK;
-    
-    // 执行落子
+    const playerPiece = myColor === 'black' ? BLACK : WHITE;
     placePiece(newBoard, row, col, playerPiece);
-    
-    // 检查游戏结果
-    let gameResult = "playing";
+
+    // 规则判定（统一引擎，顺序：规则三 → 规则四 → 规则一/二）
+    const result = evaluateMove(newBoard, row, col, playerPiece);
+
+    let gameResult = 'playing';
     let winner = null;
     let winnerReason = null;
-    
-    // 检查自包围判负
-    if (checkSelfSurroundLoss(newBoard, playerPiece)) {
-      gameResult = currentPlayer === "black" ? "white_win" : "black_win";
-      winner = currentPlayer === "black" ? "white" : "black";
-      winnerReason = "self_surround";
+    let winTarget = null;
+    let winStones = null;
+    let winRule = null;
+
+    if (result.gameOver) {
+      winner = result.winner;
+      winnerReason = result.reason;
+      winRule = result.rule;
+      if (result.winTarget) winTarget = result.winTarget;
+      if (result.winStones) winStones = result.winStones;
+      gameResult = winner === 'black' ? 'black_win' : 'white_win';
     }
-    
-    // 检查连续两排判负
-    if (gameResult === "playing" && checkTwoRowsLoss(newBoard, playerPiece)) {
-      gameResult = currentPlayer === "black" ? "white_win" : "black_win";
-      winner = currentPlayer === "black" ? "white" : "black";
-      winnerReason = "two_rows";
-    }
-    
-    // 检查围子获胜
-    if (gameResult === "playing") {
-      const winResult = checkSurroundWin(newBoard, playerPiece);
-      if (winResult) {
-        gameResult = currentPlayer === "black" ? "black_win" : "white_win";
-        winner = currentPlayer;
-        winnerReason = "surround";
-      }
-    }
-    
+
     // 更新游戏状态
     const updateData = {
       board_state: newBoard,
-      current_player: currentPlayer === "black" ? "white" : "black",
+      current_player: myColor === 'black' ? 'white' : 'black',
       move_count: game.move_count + 1,
+      last_move: { row, col, player: myColor },
       last_move_time: db.serverDate(),
+      [`last_heartbeat_${myColor}`]: db.serverDate(),
       updated_at: db.serverDate()
     };
-    
-    if (gameResult !== "playing") {
+    if (sessionId) updateData[myColor + '_session'] = sessionId;
+
+    if (gameResult !== 'playing') {
       updateData.status = gameResult;
       updateData.winner = winner;
       updateData.winner_reason = winnerReason;
       updateData.end_time = db.serverDate();
+      if (winTarget) updateData.win_target = winTarget;
+      if (winStones) updateData.win_stones = winStones;
+      if (winRule !== null) updateData.win_rule = winRule;
     }
-    
-    // 更新游戏记录
-    await db.collection("games").doc(gameId).update({
-      data: updateData
-    });
-    
+
+    await db.collection('games').doc(gameId).update({ data: updateData });
+
     // 记录棋步
     const moveData = {
       game_id: gameId,
       move_number: game.move_count + 1,
-      player: currentPlayer,
-      row: row,
-      col: col,
+      player: myColor,
+      row,
+      col,
       piece: playerPiece,
       timestamp: db.serverDate(),
       board_state_before: game.board_state,
@@ -190,431 +402,499 @@ exports.makeMove = async (event, context) => {
       is_undo: false,
       created_at: db.serverDate()
     };
-    
-    await db.collection("moves").add({
-      data: moveData
-    });
-    
-    // 如果游戏结束，更新玩家统计
-    if (gameResult !== "playing") {
-      await updatePlayerStats(game, winner);
+    await db.collection('moves').add({ data: moveData });
+
+    // 游戏结束 → 结算
+    let statsResult = null;
+    if (gameResult !== 'playing') {
+      statsResult = await updatePlayerStats({ ...game, _id: gameId }, winner, winnerReason);
+      await db.collection('games').doc(gameId).update({
+        data: {
+          points_delta_black: statsResult.blackDelta,
+          points_delta_white: statsResult.whiteDelta,
+          black_rank_after: statsResult.blackRankName,
+          white_rank_after: statsResult.whiteRankName
+        }
+      });
     }
-    
-    return {
+
+    const response = {
       code: 200,
-      message: "落子成功",
+      message: '落子成功',
       data: {
-        game: {
-          ...game,
-          ...updateData
-        },
-        move: moveData
+        game: { ...game, ...updateData, _id: gameId },
+        move: moveData,
+        gameOver: gameResult !== 'playing',
+        winner,
+        winnerReason,
+        winTarget,
+        winStones,
+        winRule,
+        stats: statsResult
       }
     };
+    await logRequest(requestId, 'makeMove', response);
+    return response;
   } catch (error) {
-    console.error("落子失败:", error);
-    return {
-      code: 500,
-      message: "落子失败",
-      data: null
-    };
+    console.error('落子失败:', error);
+    const response = { code: 500, message: '落子失败: ' + (error.message || error), data: null };
+    await logRequest(requestId, 'makeMove', response);
+    return response;
   }
 };
 
-// 更新玩家统计
-async function updatePlayerStats(game, winner) {
-  try {
-    // 更新黑方统计
-    const blackUpdate = {
-      total_games: _.inc(1),
-      updated_at: db.serverDate()
-    };
-
-    if (winner === "black") {
-      blackUpdate.wins = _.inc(1);
-      blackUpdate.rankPoints = _.inc(ONLINE_WIN_POINTS);
-    } else if (winner === "white") {
-      blackUpdate.losses = _.inc(1);
-      blackUpdate.rankPoints = _.inc(ONLINE_LOSS_POINTS);
-    } else {
-      blackUpdate.draws = _.inc(1);
-    }
-
-    await db.collection("players").doc(game.black_player_id).update({
-      data: blackUpdate
-    });
-
-    // 重新计算黑方段位名
-    try {
-      const blackPlayer = await db.collection("players").doc(game.black_player_id).get();
-      if (blackPlayer.data) {
-        const newPoints = Math.max(0, (blackPlayer.data.rankPoints || 0));
-        const newRankName = getRankNameByPoints(newPoints);
-        await db.collection("players").doc(game.black_player_id).update({
-          data: { rankName: newRankName }
-        });
-      }
-    } catch (e) { console.error("更新黑方段位名失败:", e); }
-
-    // 更新白方统计
-    const whiteUpdate = {
-      total_games: _.inc(1),
-      updated_at: db.serverDate()
-    };
-
-    if (winner === "white") {
-      whiteUpdate.wins = _.inc(1);
-      whiteUpdate.rankPoints = _.inc(ONLINE_WIN_POINTS);
-    } else if (winner === "black") {
-      whiteUpdate.losses = _.inc(1);
-      whiteUpdate.rankPoints = _.inc(ONLINE_LOSS_POINTS);
-    } else {
-      whiteUpdate.draws = _.inc(1);
-    }
-
-    await db.collection("players").doc(game.white_player_id).update({
-      data: whiteUpdate
-    });
-
-    // 重新计算白方段位名
-    try {
-      const whitePlayer = await db.collection("players").doc(game.white_player_id).get();
-      if (whitePlayer.data) {
-        const newPoints = Math.max(0, (whitePlayer.data.rankPoints || 0));
-        const newRankName = getRankNameByPoints(newPoints);
-        await db.collection("players").doc(game.white_player_id).update({
-          data: { rankName: newRankName }
-        });
-      }
-    } catch (e) { console.error("更新白方段位名失败:", e); }
-  } catch (error) {
-    console.error("更新玩家统计失败:", error);
-  }
-}
-
-// 悔棋请求
+// ===== 悔棋请求 =====
 exports.requestUndo = async (event, context) => {
-  const { gameId, targetMoveNumber } = event;
+  const { gameId, targetMoveNumber, requestId } = event;
   const wxContext = cloud.getWXContext();
   const openid = wxContext.OPENID;
-  
+
+  const idem = await checkIdempotent(requestId);
+  if (idem.hit) return idem.result;
+
   try {
     const game = await getGame(gameId);
-    
-    // 验证玩家身份
-    const isBlackPlayer = game.black_openid === openid;
-    const isWhitePlayer = game.white_openid === openid;
-    
-    if (!isBlackPlayer && !isWhitePlayer) {
-      return {
-        code: 403,
-        message: "您不是该游戏的玩家",
-        data: null
-      };
+    const myColor = verifyPlayer(game, openid);
+    if (!myColor) return { code: 403, message: '您不是该游戏的玩家', data: null };
+
+    if (game.status !== 'playing') {
+      return { code: 400, message: '游戏已结束，无法悔棋', data: null };
     }
-    
-    // 验证游戏状态
-    if (game.status !== "playing") {
-      return {
-        code: 400,
-        message: "游戏已结束，无法悔棋",
-        data: null
-      };
+
+    // 悔棋次数限制（每局每玩家 1 次免费）
+    const usedKey = 'undo_used_' + myColor;
+    if ((game[usedKey] || 0) >= UNDO_LIMIT_PER_PLAYER) {
+      return { code: 400, message: '本局悔棋次数已用完', data: null };
     }
-    
-    // 验证悔棋步数
+
+    // 已有自己发起的待处理请求
+    const existing = await db.collection('undo_requests').where({
+      game_id: gameId,
+      requester: myColor,
+      status: 'pending'
+    }).limit(1).get();
+    if (existing.data && existing.data.length > 0) {
+      return { code: 400, message: '已有待处理的悔棋请求', data: null };
+    }
+
     if (targetMoveNumber < 1 || targetMoveNumber >= game.move_count) {
-      return {
-        code: 400,
-        message: "无效的悔棋步数",
-        data: null
-      };
+      return { code: 400, message: '无效的悔棋步数', data: null };
     }
-    
-    // 创建悔棋请求
-    const requester = isBlackPlayer ? "black" : "white";
+
     const undoRequest = {
       game_id: gameId,
-      requester: requester,
+      requester: myColor,
+      requester_openid: openid,
       target_move_number: targetMoveNumber,
-      status: "pending",
+      status: 'pending',
       created_at: db.serverDate(),
       updated_at: db.serverDate()
     };
-    
-    const result = await db.collection("undo_requests").add({
-      data: undoRequest
-    });
-    
-    return {
+    const result = await db.collection('undo_requests').add({ data: undoRequest });
+
+    // 递增该玩家本局悔棋发起次数
+    const inc = {};
+    inc[usedKey] = _.inc(1);
+    await db.collection('games').doc(gameId).update({ data: inc });
+
+    const response = {
       code: 200,
-      message: "悔棋请求已发送",
-      data: {
-        ...undoRequest,
-        _id: result._id
-      }
+      message: '悔棋请求已发送',
+      data: { ...undoRequest, _id: result._id }
     };
+    await logRequest(requestId, 'requestUndo', response);
+    return response;
   } catch (error) {
-    console.error("发送悔棋请求失败:", error);
-    return {
-      code: 500,
-      message: "发送悔棋请求失败",
-      data: null
-    };
+    console.error('发送悔棋请求失败:', error);
+    const response = { code: 500, message: '发送悔棋请求失败', data: null };
+    await logRequest(requestId, 'requestUndo', response);
+    return response;
   }
 };
 
-// 处理悔棋请求
+// ===== 处理悔棋请求 =====
 exports.handleUndo = async (event, context) => {
-  const { requestId, approve } = event;
+  const { requestId: undoRequestId, idemRequestId, approve } = event;
   const wxContext = cloud.getWXContext();
   const openid = wxContext.OPENID;
-  
+
+  const idem = await checkIdempotent(idemRequestId);
+  if (idem.hit) return idem.result;
+
   try {
-    // 获取悔棋请求
-    const request = await db.collection("undo_requests").doc(requestId).get();
-    if (!request.data) {
-      return {
-        code: 404,
-        message: "悔棋请求不存在",
-        data: null
-      };
-    }
-    
+    const request = await db.collection('undo_requests').doc(undoRequestId).get();
+    if (!request.data) return { code: 404, message: '悔棋请求不存在', data: null };
     const undoRequest = request.data;
-    
-    // 获取游戏信息
-    const game = await db.collection("games").doc(undoRequest.game_id).get();
-    if (!game.data) {
-      return {
-        code: 404,
-        message: "游戏不存在",
-        data: null
-      };
-    }
-    
+
+    const game = await db.collection('games').doc(undoRequest.game_id).get();
+    if (!game.data) return { code: 404, message: '游戏不存在', data: null };
     const gameData = game.data;
-    
-    // 验证响应者身份
-    const isBlackPlayer = gameData.black_openid === openid;
-    const isWhitePlayer = gameData.white_openid === openid;
-    
-    if (!isBlackPlayer && !isWhitePlayer) {
-      return {
-        code: 403,
-        message: "您不是该游戏的玩家",
-        data: null
-      };
+
+    const myColor = verifyPlayer(gameData, openid);
+    if (!myColor) return { code: 403, message: '您不是该游戏的玩家', data: null };
+    if (myColor === undoRequest.requester) {
+      return { code: 400, message: '不能响应自己的悔棋请求', data: null };
     }
-    
-    const responder = isBlackPlayer ? "black" : "white";
-    
-    // 验证响应者不是请求者
-    if (responder === undoRequest.requester) {
-      return {
-        code: 400,
-        message: "不能响应自己的悔棋请求",
-        data: null
-      };
-    }
-    
+
     // 更新悔棋请求状态
-    await db.collection("undo_requests").doc(requestId).update({
+    await db.collection('undo_requests').doc(undoRequestId).update({
       data: {
-        status: approve ? "approved" : "rejected",
-        response_by: responder,
+        status: approve ? 'approved' : 'rejected',
+        response_by: myColor,
         response_time: db.serverDate(),
         updated_at: db.serverDate()
       }
     });
-    
+
     if (approve) {
-      // 执行悔棋
-      // 获取目标步数之后的棋步
-      const movesToUndo = await db.collection("moves")
+      // 获取目标步数的棋盘状态
+      const targetMove = await db.collection('moves')
+        .where({ game_id: undoRequest.game_id, move_number: undoRequest.target_move_number })
+        .limit(1).get();
+      if (targetMove.data.length === 0) {
+        return { code: 404, message: '目标步数不存在', data: null };
+      }
+      const targetBoardState = targetMove.data[0].board_state_after;
+      const newMoveCount = undoRequest.target_move_number;
+      const newCurrentPlayer = newMoveCount % 2 === 0 ? 'white' : 'black';
+
+      await db.collection('games').doc(undoRequest.game_id).update({
+        data: {
+          board_state: targetBoardState,
+          move_count: newMoveCount,
+          current_player: newCurrentPlayer,
+          updated_at: db.serverDate()
+        }
+      });
+
+      // 标记已撤销的棋步
+      const movesToUndo = await db.collection('moves')
         .where({
           game_id: undoRequest.game_id,
           move_number: _.gt(undoRequest.target_move_number),
           is_undo: false
         })
-        .orderBy("move_number", "asc")
         .get();
-      
-      // 获取目标步数时的棋盘状态
-      const targetMove = await db.collection("moves")
-        .where({
-          game_id: undoRequest.game_id,
-          move_number: undoRequest.target_move_number
-        })
-        .get();
-      
-      if (targetMove.data.length === 0) {
-        return {
-          code: 404,
-          message: "目标步数不存在",
-          data: null
-        };
-      }
-      
-      const targetBoardState = targetMove.data[0].board_state_after;
-      
-      // 更新游戏状态
-      await db.collection("games").doc(undoRequest.game_id).update({
-        data: {
-          board_state: targetBoardState,
-          move_count: undoRequest.target_move_number,
-          current_player: undoRequest.target_move_number % 2 === 0 ? "white" : "black",
-          updated_at: db.serverDate()
-        }
-      });
-      
-      // 标记已撤销的棋步
       for (const move of movesToUndo.data) {
-        await db.collection("moves").doc(move._id).update({
-          data: {
-            is_undo: true,
-            updated_at: db.serverDate()
-          }
+        await db.collection('moves').doc(move._id).update({
+          data: { is_undo: true, updated_at: db.serverDate() }
         });
       }
     }
-    
-    return {
+
+    const response = {
       code: 200,
-      message: approve ? "已同意悔棋" : "已拒绝悔棋",
-      data: {
-        request: undoRequest,
-        approved: approve
-      }
+      message: approve ? '已同意悔棋' : '已拒绝悔棋',
+      data: { request: undoRequest, approved: approve }
     };
+    await logRequest(idemRequestId, 'handleUndo', response);
+    return response;
   } catch (error) {
-    console.error("处理悔棋请求失败:", error);
-    return {
-      code: 500,
-      message: "处理悔棋请求失败",
-      data: null
-    };
+    console.error('处理悔棋请求失败:', error);
+    const response = { code: 500, message: '处理悔棋请求失败', data: null };
+    await logRequest(idemRequestId, 'handleUndo', response);
+    return response;
   }
 };
 
-// 认输
+// ===== 认输 =====
 exports.resignGame = async (event, context) => {
-  const { gameId } = event;
+  const { gameId, requestId } = event;
   const wxContext = cloud.getWXContext();
   const openid = wxContext.OPENID;
-  
+
+  const idem = await checkIdempotent(requestId);
+  if (idem.hit) return idem.result;
+
   try {
     const game = await getGame(gameId);
-    
-    // 验证玩家身份
-    const isBlackPlayer = game.black_openid === openid;
-    const isWhitePlayer = game.white_openid === openid;
-    
-    if (!isBlackPlayer && !isWhitePlayer) {
-      return {
-        code: 403,
-        message: "您不是该游戏的玩家",
-        data: null
-      };
+    const myColor = verifyPlayer(game, openid);
+    if (!myColor) return { code: 403, message: '您不是该游戏的玩家', data: null };
+    if (game.status !== 'playing') {
+      return { code: 400, message: '游戏已结束', data: null };
     }
-    
-    // 验证游戏状态
-    if (game.status !== "playing") {
-      return {
-        code: 400,
-        message: "游戏已结束",
-        data: null
-      };
-    }
-    
-    // 更新游戏状态
-    const resigningPlayer = isBlackPlayer ? "black" : "white";
-    const winner = isBlackPlayer ? "white" : "black";
-    
-    await db.collection("games").doc(gameId).update({
-      data: {
-        status: `${resigningPlayer}_resign`,
-        winner: winner,
-        winner_reason: "resign",
-        end_time: db.serverDate(),
-        updated_at: db.serverDate()
-      }
-    });
-    
-    // 更新玩家统计
-    await updatePlayerStats(game, winner);
-    
-    return {
+
+    const winner = myColor === 'black' ? 'white' : 'black';
+    const statsResult = await finishGame(gameId, game, winner, 'resign', null, null, null);
+
+    const response = {
       code: 200,
-      message: "认输成功",
-      data: {
-        winner: winner,
-        resigningPlayer: resigningPlayer
-      }
+      message: '认输成功',
+      data: { winner, resigningPlayer: myColor, stats: statsResult }
     };
+    await logRequest(requestId, 'resignGame', response);
+    return response;
   } catch (error) {
-    console.error("认输失败:", error);
-    return {
-      code: 500,
-      message: "认输失败",
-      data: null
-    };
+    console.error('认输失败:', error);
+    const response = { code: 500, message: '认输失败', data: null };
+    await logRequest(requestId, 'resignGame', response);
+    return response;
   }
 };
 
-// 获取游戏状态
+// ===== 获取游戏状态 =====
 exports.getGameStatus = async (event, context) => {
-  const { gameId } = event;
+  const { gameId, sessionId } = event;
   const wxContext = cloud.getWXContext();
   const openid = wxContext.OPENID;
-  
+
   try {
     const game = await getGame(gameId);
-    
-    // 验证观看权限
-    const isPlayer = game.black_openid === openid || game.white_openid === openid;
-    
-    if (!isPlayer) {
-      return {
-        code: 403,
-        message: "您不是该游戏的玩家",
-        data: null
-      };
+    const myColor = verifyPlayer(game, openid);
+    if (!myColor) return { code: 403, message: '您不是该游戏的玩家', data: null };
+
+    // 懒检查对方心跳（对局进行中）
+    let disconnected = false;
+    if (game.status === 'playing') {
+      const hb = checkOpponentHeartbeat(game, myColor);
+      if (hb) {
+        // 对方掉线判负
+        const winner = myColor;
+        await finishGame(gameId, game, winner, 'disconnect', null, null, null);
+        const refreshed = await getGame(gameId);
+        return {
+          code: 200,
+          message: '获取游戏状态成功',
+          data: {
+            game: refreshed,
+            recentMoves: [],
+            pendingUndoRequests: [],
+            disconnected: true
+          }
+        };
+      }
     }
-    
-    // 获取最近的棋步
-    const recentMoves = await db.collection("moves")
-      .where({
-        game_id: gameId,
-        is_undo: false
-      })
-      .orderBy("move_number", "desc")
+
+    // 同步 session（首次进入或重连时绑定）
+    if (sessionId && game[myColor + '_session'] !== sessionId) {
+      const sUpdate = {};
+      sUpdate[myColor + '_session'] = sessionId;
+      sUpdate['last_heartbeat_' + myColor] = db.serverDate();
+      try {
+        await db.collection('games').doc(gameId).update({ data: sUpdate });
+      } catch (e) { /* ignore */ }
+    }
+
+    const recentMoves = await db.collection('moves')
+      .where({ game_id: gameId, is_undo: false })
+      .orderBy('move_number', 'desc')
       .limit(10)
       .get();
-    
-    // 获取待处理的悔棋请求
-    const pendingUndoRequests = await db.collection("undo_requests")
-      .where({
-        game_id: gameId,
-        status: "pending"
-      })
+
+    const pendingUndoRequests = await db.collection('undo_requests')
+      .where({ game_id: gameId, status: 'pending' })
       .get();
-    
+
     return {
       code: 200,
-      message: "获取游戏状态成功",
+      message: '获取游戏状态成功',
       data: {
-        game: game,
+        game,
         recentMoves: recentMoves.data,
-        pendingUndoRequests: pendingUndoRequests.data
+        pendingUndoRequests: pendingUndoRequests.data,
+        myColor
       }
     };
   } catch (error) {
-    console.error("获取游戏状态失败:", error);
-    return {
-      code: 500,
-      message: "获取游戏状态失败",
-      data: null
+    console.error('获取游戏状态失败:', error);
+    return { code: 500, message: '获取游戏状态失败', data: null };
+  }
+};
+
+// ===== 心跳 =====
+exports.heartbeat = async (event, context) => {
+  const { gameId, sessionId } = event;
+  const wxContext = cloud.getWXContext();
+  const openid = wxContext.OPENID;
+
+  try {
+    const game = await getGame(gameId);
+    const myColor = verifyPlayer(game, openid);
+    if (!myColor) return { code: 403, message: '您不是该游戏的玩家', data: null };
+
+    if (game.status !== 'playing') {
+      return { code: 200, message: '对局已结束', data: { gameOver: true, game } };
+    }
+
+    // session 校验（多设备）
+    if (sessionId && game[myColor + '_session'] && game[myColor + '_session'] !== sessionId) {
+      return { code: 409, message: '已在其他设备登录', data: null };
+    }
+
+    // 检查对方心跳
+    const hb = checkOpponentHeartbeat(game, myColor);
+    if (hb) {
+      const winner = myColor;
+      const statsResult = await finishGame(gameId, game, winner, 'disconnect', null, null, null);
+      return {
+        code: 200,
+        message: '对手掉线',
+        data: { gameOver: true, winner, reason: 'disconnect', stats: statsResult }
+      };
+    }
+
+    // 更新自己的心跳与 session
+    const update = {};
+    update['last_heartbeat_' + myColor] = db.serverDate();
+    if (sessionId) update[myColor + '_session'] = sessionId;
+    await db.collection('games').doc(gameId).update({ data: update });
+
+    return { code: 200, message: 'ok', data: { gameOver: false } };
+  } catch (error) {
+    console.error('心跳失败:', error);
+    return { code: 500, message: '心跳失败', data: null };
+  }
+};
+
+// ===== 再来一局：发起邀请 =====
+exports.inviteRematch = async (event, context) => {
+  const { gameId } = event;
+  const openid = cloud.getWXContext().OPENID;
+
+  try {
+    const game = await getGame(gameId);
+    const myColor = verifyPlayer(game, openid);
+    if (!myColor) return { code: 403, message: '您不是该游戏的玩家', data: null };
+    if (game.status === 'playing') {
+      return { code: 400, message: '对局仍在进行', data: null };
+    }
+
+    const toOpenid = myColor === 'black' ? game.white_openid : game.black_openid;
+
+    // 已有 pending 邀请
+    const existing = await db.collection('game_invitations').where({
+      from_openid: openid,
+      game_id: gameId,
+      status: 'pending'
+    }).limit(1).get();
+    if (existing.data && existing.data.length > 0) {
+      return { code: 400, message: '已发送邀请，等待对方响应', data: existing.data[0] };
+    }
+
+    const inv = {
+      game_id: gameId,
+      from_openid: openid,
+      from_color: myColor,
+      to_openid: toOpenid,
+      status: 'pending',
+      created_at: db.serverDate(),
+      expires_at: db.serverDate({ offset: 15000 })
     };
+    const res = await db.collection('game_invitations').add({ data: inv });
+
+    return { code: 200, message: '邀请已发送', data: { _id: res._id, ...inv } };
+  } catch (error) {
+    console.error('发起再来一局失败:', error);
+    return { code: 500, message: '发起再来一局失败', data: null };
+  }
+};
+
+// ===== 再来一局：响应邀请 =====
+exports.respondRematch = async (event, context) => {
+  const { invitationId, accept } = event;
+  const openid = cloud.getWXContext().OPENID;
+
+  try {
+    const invDoc = await db.collection('game_invitations').doc(invitationId).get();
+    if (!invDoc.data) return { code: 404, message: '邀请不存在', data: null };
+    const inv = invDoc.data;
+    if (inv.to_openid !== openid) return { code: 403, message: '无权响应此邀请', data: null };
+    if (inv.status !== 'pending') return { code: 400, message: '邀请已处理', data: null };
+
+    if (!accept) {
+      await db.collection('game_invitations').doc(invitationId).update({
+        data: { status: 'rejected', responded_at: db.serverDate() }
+      });
+      return { code: 200, message: '已拒绝再来一局', data: { accepted: false } };
+    }
+
+    // 同意 → 创建新房间（黑白交换）
+    const oldGame = await getGame(inv.game_id);
+    const boardSize = oldGame.board_size || 15;
+    const newBoard = createBoard(boardSize);
+    const newGame = {
+      board_size: boardSize,
+      board_state: newBoard,
+      current_player: 'black',
+      move_count: 0,
+      status: 'playing',
+      // 交换黑白方
+      black_openid: oldGame.white_openid,
+      black_player_id: oldGame.white_player_id,
+      black_nickname: oldGame.white_nickname,
+      black_avatar: oldGame.white_avatar,
+      black_rank_name: oldGame.white_rank_name,
+      white_openid: oldGame.black_openid,
+      white_player_id: oldGame.black_player_id,
+      white_nickname: oldGame.black_nickname,
+      white_avatar: oldGame.black_avatar,
+      white_rank_name: oldGame.black_rank_name,
+      winner: null,
+      winner_reason: null,
+      win_target: null,
+      win_stones: [],
+      win_rule: null,
+      start_time: db.serverDate(),
+      end_time: null,
+      last_heartbeat_black: db.serverDate(),
+      last_heartbeat_white: db.serverDate(),
+      black_session: null,
+      white_session: null,
+      undo_used_black: 0,
+      undo_used_white: 0,
+      disconnect_status: { black: false, white: false },
+      points_delta_black: 0,
+      points_delta_white: 0,
+      created_at: db.serverDate(),
+      updated_at: db.serverDate()
+    };
+    const res = await db.collection('games').add({ data: newGame });
+    await db.collection('game_invitations').doc(invitationId).update({
+      data: { status: 'accepted', new_game_id: res._id, responded_at: db.serverDate() }
+    });
+
+    return { code: 200, message: '已同意再来一局', data: { gameId: res._id, accepted: true } };
+  } catch (error) {
+    console.error('响应再来一局失败:', error);
+    return { code: 500, message: '响应再来一局失败', data: null };
+  }
+};
+
+// ===== 最近战绩 =====
+exports.getRecentGames = async (event, context) => {
+  const openid = cloud.getWXContext().OPENID;
+
+  try {
+    // 优先从 players.recent_games 读取（已摘要）
+    const playerDoc = await db.collection('players').where({ openid }).limit(1).get();
+    if (playerDoc.data && playerDoc.data.length > 0 && Array.isArray(playerDoc.data[0].recent_games)) {
+      return { code: 200, message: 'ok', data: { games: playerDoc.data[0].recent_games } };
+    }
+    // 回退：查 games 集合
+    const res = await db.collection('games').where(_.or([
+      { black_openid: openid },
+      { white_openid: openid }
+    ])).orderBy('created_at', 'desc').limit(20).get();
+
+    const list = res.data.map(g => {
+      const isBlack = g.black_openid === openid;
+      const myColor = isBlack ? 'black' : 'white';
+      const won = g.winner === myColor;
+      return {
+        gameId: g._id,
+        won,
+        opponent: isBlack ? g.white_nickname : g.black_nickname,
+        opponentRank: isBlack ? g.white_rank_name : g.black_rank_name,
+        reason: g.winner_reason,
+        moveCount: g.move_count,
+        pointsDelta: isBlack ? (g.points_delta_black || 0) : (g.points_delta_white || 0),
+        rankName: isBlack ? (g.black_rank_after || g.black_rank_name) : (g.white_rank_after || g.white_rank_name),
+        timestamp: g.created_at
+      };
+    });
+    return { code: 200, message: 'ok', data: { games: list } };
+  } catch (error) {
+    console.error('获取最近战绩失败:', error);
+    return { code: 500, message: '获取最近战绩失败', data: null };
   }
 };

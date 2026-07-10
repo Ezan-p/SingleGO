@@ -23,7 +23,8 @@ Page({
     halfCellPx: 0,
     gridPx: 0,
     cells: [],
-    myRankName: ''
+    myRankName: '',
+    pendingColor: 0 // 预览落子颜色（1=黑, 2=白），两下落子交互
   },
 
   // 非响应式
@@ -33,6 +34,7 @@ Page({
   // this.myOpenid   — 当前用户 openid
   // this._lastAppliedMove — 回声去重
   // this._endedShown
+  // this.pendingCell — 两下落子：当前预览中的交叉点 {r,c}，null 表示无预览
 
   onLoad: function (options) {
     wx.showShareMenu({ withShareTicket: true, menus: ['shareAppMessage', 'shareTimeline'] });
@@ -74,6 +76,9 @@ Page({
 
   applyRoom: function (room) {
     if (!room) return;
+    // 远端棋盘变化会重建 cells，清除本地预览状态避免错位
+    this.pendingCell = null;
+    this._placing = false; // 服务器已回写，解除落子锁
     const myOpenid = this.myOpenid;
     const myColor = (room.host && room.host.openid === myOpenid) ? dango.BLACK
                   : (room.guest && room.guest.openid === myOpenid) ? dango.WHITE : 0;
@@ -117,7 +122,8 @@ Page({
       myColor: myColor,
       host: room.host,
       guest: room.guest,
-      isMyTurn: room.status === 'playing' && room.currentPlayer === myColor
+      isMyTurn: room.status === 'playing' && room.currentPlayer === myColor,
+      pendingColor: 0
     });
 
     if (isEnded && !this._endedShown) {
@@ -150,7 +156,8 @@ Page({
           c: c,
           v: this.board[r][c],
           isStar: isStar,
-          isLast: isLast
+          isLast: isLast,
+          isPending: false
         });
       }
     }
@@ -163,14 +170,62 @@ Page({
       wx.showToast({ title: '等待对手落子', icon: 'none', duration: 800 });
       return;
     }
+    if (this._placing) return; // 等待服务器回写，避免重复落子
     const r = e.currentTarget.dataset.r;
     const c = e.currentTarget.dataset.c;
+    // 已有棋子：取消预览
+    if (this.board[r][c] !== dango.EMPTY) {
+      if (this.pendingCell) this.clearPending();
+      return;
+    }
+    if (this.pendingCell) {
+      if (this.pendingCell.r === r && this.pendingCell.c === c) {
+        // 再次点击同一交叉点 → 确认落子（写库后 watch 回调统一刷新）
+        const pr = r, pc = c;
+        this.clearPending();
+        this.confirmMove(pr, pc);
+      } else {
+        // 点击另一个空点 → 移动预览位置
+        this.setPending(r, c);
+      }
+    } else {
+      this.setPending(r, c);
+    }
+  },
+
+  confirmMove: function (r, c) {
     const self = this;
-    // 不本地预渲染，写库后 watch 回调统一刷新
+    this._placing = true;
     online.placeMove(this.data.docId, { r: r, c: c, player: this.data.myColor })
       .catch(function (err) {
+        self._placing = false; // 失败则解锁，允许重试
         wx.showToast({ title: (err && err.message) || '落子失败', icon: 'none', duration: 800 });
       });
+  },
+
+  // 设置预览交叉点（半透明棋形提示）
+  setPending: function (r, c) {
+    const size = this.board.length;
+    const updates = {};
+    if (this.pendingCell) {
+      updates['cells[' + (this.pendingCell.r * size + this.pendingCell.c) + '].isPending'] = false;
+    }
+    updates['cells[' + (r * size + c) + '].isPending'] = true;
+    updates.pendingColor = this.data.myColor;
+    this.pendingCell = { r: r, c: c };
+    this.setData(updates);
+  },
+
+  // 清除预览交叉点
+  clearPending: function () {
+    const size = this.board.length;
+    const updates = {};
+    if (this.pendingCell) {
+      updates['cells[' + (this.pendingCell.r * size + this.pendingCell.c) + '].isPending'] = false;
+    }
+    updates.pendingColor = 0;
+    this.pendingCell = null;
+    this.setData(updates);
   },
 
   onLeave: function () {
