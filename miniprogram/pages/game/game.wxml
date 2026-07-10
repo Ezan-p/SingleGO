@@ -36,14 +36,14 @@
     <text class="result-title">{{winner === 1 ? '黑棋胜利' : '白棋胜利'}}</text>
     <text class="result-reason">{{winReason}}</text>
     <view class="result-banner-actions" wx:if="{{canUndo}}">
-      <view class="btn btn-secondary result-undo-btn" bindtap="onUndo">悔棋（{{undoCount}}）</view>
+      <view class="btn btn-secondary result-undo-btn" bindtap="onUndo">{{undoBtnText}}</view>
     </view>
   </view>
 
   <!-- 控制按钮 -->
   <view class="controls">
     <view class="btn btn-primary ctrl-btn" bindtap="onNewGame">新游戏</view>
-    <view class="btn btn-secondary ctrl-btn {{!canUndo ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋（{{undoCount}}）</view>
+    <view class="btn btn-secondary ctrl-btn {{!canUndo ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">{{undoBtnText}}</view>
     <view class="btn btn-secondary ctrl-btn" bindtap="onToggleRules">规则</view>
   </view>
 

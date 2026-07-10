@@ -23,6 +23,7 @@ Page({
     moveCount: 0,
     canUndo: false,
     undoCount: 1, // 悔棋次数
+    undoBtnText: '', // 悔棋按钮文案（动态：悔棋（n）/看广告获取次数/看广告悔棋）
     showUndoAdModal: false, // 是否显示广告提示弹窗
     showMockAd: false, // 是否显示模拟广告弹窗
     mockAdCountdown: 3, // 模拟广告倒计时
@@ -138,8 +139,25 @@ Page({
       aiThinking: false,
       elapsed: '',
       pendingMove: null,
-      showResult: false
+      showResult: false,
+      undoBtnText: '悔棋（1）'
     });
+    this.refreshUndoBtn();
+  },
+
+  // 根据当前状态刷新悔棋按钮文案
+  refreshUndoBtn: function () {
+    let text;
+    if (!this.data.canUndo) {
+      text = '悔棋';
+    } else if (this.data.undoCount > 0) {
+      text = '悔棋（' + this.data.undoCount + '）';
+    } else if (this.data.gameOver) {
+      text = '广告悔棋';
+    } else {
+      text = '看广告获取次数';
+    }
+    this.setData({ undoBtnText: text });
   },
 
   buildCells: function (lastMove) {
@@ -250,6 +268,7 @@ Page({
         }
       }
       this.setData(updates);
+      this.refreshUndoBtn();
 
       const self = this;
       if (isSurroundWin) {
@@ -366,8 +385,9 @@ Page({
       this.executeUndo();
       undoManager.consume();
       this.setData({ undoCount: undoManager.getCount() });
+      this.refreshUndoBtn();
     } else {
-      // 没有悔棋次数，显示广告弹窗
+      // 没有悔棋次数，显示广告弹窗（进行中=获取次数，失败=看完自动悔一步不增次数）
       this._pendingUndo = true;
       this.setData({ showUndoAdModal: true });
     }
@@ -395,8 +415,9 @@ Page({
       this.executeUndo();
       undoManager.consume();
       this.setData({ undoCount: undoManager.getCount() });
+      this.refreshUndoBtn();
     } else {
-      // 没有悔棋次数，显示广告弹窗
+      // 没有悔棋次数，显示广告弹窗（进行中=获取次数，失败=看完自动悔一步不增次数）
       this._pendingUndo = true;
       this.setData({ showUndoAdModal: true });
     }
@@ -481,18 +502,27 @@ Page({
         clearInterval(timer);
         self.setData({ showMockAd: false, mockAdCountdown: 3 });
 
-        // 完整观看广告，奖励悔棋次数
-        undoManager.add(1);
-        wx.showToast({ title: '已获得 1 次悔棋机会', icon: 'success', duration: 1500 });
-
-        // 自动执行悔棋
-        if (self._pendingUndo) {
-          self.executeUndo();
+        if (self.data.gameOver) {
+          // 对局失败：看完广告自动悔一步，不增加悔棋次数
+          if (self._pendingUndo && self.history.length > 0) {
+            self.executeUndo();
+          }
           self._pendingUndo = false;
+        } else {
+          // 对局进行中：看完广告获取 1 次悔棋机会
+          undoManager.add(1);
+          wx.showToast({ title: '已获得 1 次悔棋机会', icon: 'success', duration: 1500 });
+
+          // 自动执行悔棋（消耗刚获取的次数）
+          if (self._pendingUndo) {
+            self.executeUndo();
+            self._pendingUndo = false;
+          }
         }
 
-        // 更新悔棋次数显示
+        // 更新悔棋次数显示与按钮文案
         self.setData({ undoCount: undoManager.getCount() });
+        self.refreshUndoBtn();
       }
     }, 1000);
   },

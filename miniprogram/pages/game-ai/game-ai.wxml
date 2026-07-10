@@ -49,7 +49,7 @@
 
   <!-- 控制按钮 -->
   <view class="controls">
-    <view class="btn btn-secondary ctrl-btn {{(!canUndo || aiThinking) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">悔棋（{{undoCount}}）</view>
+    <view class="btn btn-secondary ctrl-btn {{(!canUndo || aiThinking) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">{{undoBtnText}}</view>
     <view class="btn btn-primary ctrl-btn" bindtap="onNewGame">重新开始</view>
     <view class="btn btn-secondary ctrl-btn" bindtap="onBackHome">返回首页</view>
   </view>
@@ -97,7 +97,7 @@
       <!-- 失败时的按钮（包含悔棋） -->
       <view wx:else class="result-actions result-actions-three">
         <view class="btn btn-secondary result-btn" bindtap="onResultHome">返回首页</view>
-        <view class="btn btn-secondary result-btn" bindtap="onResultUndo">悔棋（{{undoCount}}）</view>
+        <view class="btn btn-secondary result-btn" bindtap="onResultUndo">{{undoBtnText}}</view>
         <view class="btn btn-primary result-btn" bindtap="onResultReplay">再来一局</view>
       </view>
     </view>

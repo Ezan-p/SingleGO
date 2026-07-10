@@ -13,6 +13,7 @@ Page({
     moveCount: 0,
     canUndo: false,
     undoCount: 1, // 悔棋次数
+    undoBtnText: '', // 悔棋按钮文案（动态：悔棋（n）/看广告获取次数/看广告悔棋）
     showUndoAdModal: false, // 是否显示广告提示弹窗
     showMockAd: false, // 是否显示模拟广告弹窗
     mockAdCountdown: 3, // 模拟广告倒计时
@@ -109,6 +110,12 @@ Page({
       gridPx: gridPx,
       cells: cells
     });
+    this.refreshUndoBtn();
+  },
+
+  // 本地双人：悔棋无次数限制，始终可直接悔棋
+  refreshUndoBtn: function () {
+    this.setData({ undoBtnText: '悔棋' });
   },
 
   // 构建棋盘所有交叉点数据
@@ -228,6 +235,7 @@ Page({
         }
       }
       this.setData(updates);
+      this.refreshUndoBtn();
 
       const self = this;
       const delay = isSurroundWin ? 1800 : 300;
@@ -249,18 +257,10 @@ Page({
     if (!this.data.canUndo) return;
     if (this.history.length === 0) return;
 
-    // 检查悔棋次数
-    if (undoManager.getCount() > 0) {
-      // 有悔棋次数，执行悔棋
-      this._pendingUndo = true;
-      this.executeUndo();
-      undoManager.consume();
-      this.setData({ undoCount: undoManager.getCount() });
-    } else {
-      // 没有悔棋次数，显示广告弹窗
-      this._pendingUndo = true;
-      this.setData({ showUndoAdModal: true });
-    }
+    // 本地双人：悔棋无次数限制，随时可直接悔棋（含对局失败后复活）
+    this._pendingUndo = true;
+    this.executeUndo();
+    this._pendingUndo = false;
   },
 
   // 执行悔棋操作
@@ -325,18 +325,27 @@ Page({
         clearInterval(timer);
         self.setData({ showMockAd: false, mockAdCountdown: 3 });
 
-        // 完整观看广告，奖励悔棋次数
-        undoManager.add(1);
-        wx.showToast({ title: '已获得 1 次悔棋机会', icon: 'success', duration: 1500 });
-
-        // 自动执行悔棋
-        if (self._pendingUndo) {
-          self.executeUndo();
+        if (self.data.gameOver) {
+          // 对局失败：看完广告自动悔一步，不增加悔棋次数
+          if (self._pendingUndo && self.history.length > 0) {
+            self.executeUndo();
+          }
           self._pendingUndo = false;
+        } else {
+          // 对局进行中：看完广告获取 1 次悔棋机会
+          undoManager.add(1);
+          wx.showToast({ title: '已获得 1 次悔棋机会', icon: 'success', duration: 1500 });
+
+          // 自动执行悔棋（消耗刚获取的次数）
+          if (self._pendingUndo) {
+            self.executeUndo();
+            self._pendingUndo = false;
+          }
         }
 
-        // 更新悔棋次数显示
+        // 更新悔棋次数显示与按钮文案
         self.setData({ undoCount: undoManager.getCount() });
+        self.refreshUndoBtn();
       }
     }, 1000);
   },
