@@ -3,6 +3,7 @@ const app = getApp();
 const dango = require('../../utils/dango.js');
 const ai = require('../../utils/ai.js');
 const undoManager = require('../../utils/undo-manager.js');
+const sound = require('../../utils/sound.js');
 const rewardedAd = require('../../utils/rewarded-ad.js');
 const rank = require('../../utils/rank.js');
 
@@ -289,6 +290,9 @@ Page({
         this.scheduleAIMove();
       }
     }
+
+    // 落子音效（玩家与 AI 落子均触发）
+    sound.playStone();
   },
 
   scheduleAIMove: function () {

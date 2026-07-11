@@ -2,6 +2,7 @@
 const dango = require('../../utils/dango.js');
 const online = require('../../utils/online.js');
 const rank = require('../../utils/rank.js');
+const sound = require('../../utils/sound.js');
 const app = getApp();
 
 Page({
@@ -110,6 +111,15 @@ Page({
       const cells = this.buildCells(room.lastMove);
       this._lastAppliedMove = room.lastMove;
       this.setData({ cells: cells, lastMove: room.lastMove });
+    }
+
+    // 落子音效：新棋子落到棋盘上时播放（载入对局不发声）
+    const curMoves = (room.moves && room.moves.length) || 0;
+    if (this._soundMoveCount === undefined) {
+      this._soundMoveCount = curMoves;
+    } else if (curMoves > this._soundMoveCount) {
+      sound.playStone();
+      this._soundMoveCount = curMoves;
     }
 
     const isEnded = room.status === 'ended' && room.winner !== 0;

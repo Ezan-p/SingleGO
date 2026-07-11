@@ -13,8 +13,8 @@
           <view class="picker-value">{{sizeOptions[sizeIndex]}}</view>
         </picker>
       </view>
-      <view class="btn btn-gold home-btn" bindtap="onCreateRoom">{{busy ? '创建中...' : '创建房间'}}</view>
-      <view class="btn btn-outline home-btn" bindtap="onShowJoin">加入房间</view>
+      <view class="btn btn-gold home-btn" bindtap="onCreateRoom" style="position: relative; left: -30rpx; top: 7rpx">{{busy ? '创建中...' : '创建房间'}}</view>
+      <view class="btn btn-outline home-btn" bindtap="onShowJoin" style="position: relative; left: -23rpx; top: -2rpx">加入房间</view>
     </view>
   </block>
 

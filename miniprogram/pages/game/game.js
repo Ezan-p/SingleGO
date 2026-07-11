@@ -2,6 +2,7 @@
 const dango = require('../../utils/dango.js');
 const undoManager = require('../../utils/undo-manager.js');
 const rewardedAd = require('../../utils/rewarded-ad.js');
+const sound = require('../../utils/sound.js');
 
 Page({
   data: {
@@ -247,6 +248,9 @@ Page({
       updates.lastMove = { r: r, c: c };
       this.setData(updates);
     }
+
+    // 落子音效
+    sound.playStone();
   },
 
   onNewGame: function () {

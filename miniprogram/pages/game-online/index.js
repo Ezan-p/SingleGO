@@ -4,6 +4,7 @@ const dango = require('../../utils/dango.js');
 const rank = require('../../utils/rank.js');
 const onlineMatch = require('../../utils/online-match.js');
 const network = require('../../utils/network.js');
+const sound = require('../../utils/sound.js');
 
 const HEARTBEAT_INTERVAL = 10000; // 10s
 const WIN_HIGHLIGHT_DELAY = 1800; // 1.8s 高亮后再弹结算
@@ -196,6 +197,15 @@ Page({
     });
 
     this.calculateBoardLayout(game.board_size, game.board_state, game.last_move, gameOver ? game.win_stones : null, gameOver ? game.win_target : null);
+
+    // 落子音效：新棋子落到棋盘上时播放（载入对局不发声）
+    const newCount = game.move_count || 0;
+    if (this._soundMoveCount === undefined) {
+      this._soundMoveCount = newCount;
+    } else if (newCount > this._soundMoveCount) {
+      sound.playStone();
+      this._soundMoveCount = newCount;
+    }
 
     if (gameOver) {
       this.handleGameOver(game);
