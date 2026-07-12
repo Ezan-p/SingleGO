@@ -377,15 +377,27 @@ Page({
   },
 
   getWinReasonText: function (reason) {
+    // 来自 evaluateMove 的原始中文原因（与 dango.js/dango-logic.js 保持一致）
     const map = {
-      surround: '围子获胜',
-      self_surround: '自包围判负',
-      two_rows: '连续两排判负',
-      resign: '认输',
-      disconnect: '对手掉线',
-      timeout: '超时判负'
+      // 围子胜（规则一/二）
+      '十字围': '十字围获胜',
+      '边缘十字围': '边缘十字围获胜',
+      '斜角围': '斜角围获胜',
+      '边缘斜角围': '边缘斜角围获胜',
+      // 判负（规则三/四）
+      '八方全占（自包围）': '自包围判负',
+      '相邻横行连续超过三颗': '连续两排判负',
+      '相邻竖列连续超过三颗': '连续两排判负',
+      '相邻斜行连续超过三颗': '连续两排判负',
+      // 其他
+      'surround': '围子获胜',
+      'self_surround': '自包围判负',
+      'two_rows': '连续两排判负',
+      'resign': '认输',
+      'disconnect': '对手掉线',
+      'timeout': '超时判负'
     };
-    return map[reason] || '对局结束';
+    return map[reason] || reason || '对局结束';
   },
 
   // ===== 心跳 =====

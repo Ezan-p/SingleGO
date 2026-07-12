@@ -205,9 +205,8 @@ Page({
       this.clearPending();
       this.placePiece(r, c);
     } else {
-      // 第一次点击或切换新位置 → 确认位置
+      // 第一次点击或切换新位置 → 预览落子（半透明棋形提示，与本地双人一致）
       this.setPending(r, c);
-      wx.showToast({ title: '再次点击确认落子', icon: 'none', duration: 700 });
     }
   },
 

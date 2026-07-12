@@ -217,34 +217,45 @@ function chainDiagMatch(a, b, dr, dc) {
 }
 
 // 规则四：连续两排超过三颗判负
-//   横向 — 相邻两行各自 >3 连续段，列区间任意重叠
-//   竖向 — 相邻两列各自 >3 连续段，行区间任意重叠
+//   横向 — 相邻两行各自 >3 连续段，列区间重叠且重叠长度 == 较短段长度（近乎对齐）
+//   竖向 — 相邻两列各自 >3 连续段，行区间重叠且重叠长度 == 较短段长度（近乎对齐）
 //   ↘   — 两条平行 ↘ 对角线（r-c 相差 2）各自 >3 连续段，偏移 (1,-1) 西南方向逐子一一对应
 //   ↙   — 两条平行 ↙ 对角线（r+c 相差 2）各自 >3 连续段，偏移 (1,1) 东南方向逐子一一对应
-//   说明：斜向对应指每颗棋子在对角方向（东北/东南/西南/西北）上有对应棋子，距离 1 步；
+//   说明：横/竖向仅「错位阶梯状」(如一行比另一行偏移1格) 不判负；
+//         斜向对应指每颗棋子在对角方向上有对应棋子，距离 1 步；
 //         两条链方向相同、平行且逐子对应，长度一致，无断点、错位或局部重叠。
 function checkConsecutiveRowsLoss(board, player) {
   const size = board.length;
   let r, c, i, j;
 
-  // 1. 横向：相邻行 r 与 r+1，列区间重叠
+  // 1. 横向：相邻行 r 与 r+1，列区间重叠且重叠覆盖整段较短者
   const hRuns = [];
   for (r = 0; r < size; r++) hRuns.push(findRuns(getHorizontalLine(board, r), player));
   for (r = 0; r < size - 1; r++) {
     for (i = 0; i < hRuns[r].length; i++) {
       for (j = 0; j < hRuns[r + 1].length; j++) {
-        if (rangesOverlap(hRuns[r][i].c1, hRuns[r][i].c2, hRuns[r + 1][j].c1, hRuns[r + 1][j].c2)) return { direction: 'h' };
+        var ri = hRuns[r][i], rj = hRuns[r + 1][j];
+        if (rangesOverlap(ri.c1, ri.c2, rj.c1, rj.c2)) {
+          var overlapLen = Math.min(ri.c2, rj.c2) - Math.max(ri.c1, rj.c1) + 1;
+          var shorterLen = Math.min(ri.cells.length, rj.cells.length);
+          if (overlapLen >= shorterLen) return { direction: 'h' };
+        }
       }
     }
   }
 
-  // 2. 竖向：相邻列 c 与 c+1，行区间重叠
+  // 2. 竖向：相邻列 c 与 c+1，行区间重叠且重叠覆盖整段较短者
   const vRuns = [];
   for (c = 0; c < size; c++) vRuns.push(findRuns(getVerticalLine(board, c), player));
   for (c = 0; c < size - 1; c++) {
     for (i = 0; i < vRuns[c].length; i++) {
       for (j = 0; j < vRuns[c + 1].length; j++) {
-        if (rangesOverlap(vRuns[c][i].r1, vRuns[c][i].r2, vRuns[c + 1][j].r1, vRuns[c + 1][j].r2)) return { direction: 'v' };
+        var vi = vRuns[c][i], vj = vRuns[c + 1][j];
+        if (rangesOverlap(vi.r1, vi.r2, vj.r1, vj.r2)) {
+          var overlapLen = Math.min(vi.r2, vj.r2) - Math.max(vi.r1, vj.r1) + 1;
+          var shorterLen = Math.min(vi.cells.length, vj.cells.length);
+          if (overlapLen >= shorterLen) return { direction: 'v' };
+        }
       }
     }
   }
@@ -277,11 +288,13 @@ function checkConsecutiveRowsLoss(board, player) {
 }
 
 // 主判定入口：按指定顺序检测
-// 1. 规则三（自包围判负）
-// 2. 规则四（连续两排判负）
-// 3. 规则一/二（围子胜）
-// 4. 继续
+// 1. 规则三（自包围判负）— 落子方自包围 → 落子方负
+// 2. 规则四（连续两排判负）— 落子方双排 → 落子方负
+// 3. 规则一/二（围子胜）— 落子方围住对方 → 落子方胜
+// 4. 对手围子胜 — 对手因落子方的这步棋而完成围子（如白走入黑的包围圈）→ 对手胜
+// 5. 继续
 function evaluateMove(board, lastR, lastC, player) {
+  // 1~3: 落子方自身的胜负判定
   if (checkSelfSurroundLoss(board, player)) {
     return { gameOver: true, winner: opponent(player), reason: '八方全占（自包围）', rule: 3 };
   }
@@ -310,6 +323,26 @@ function evaluateMove(board, lastR, lastC, player) {
       winStones: win.stones
     };
   }
+
+  // 4: 对手的围子胜 — 落子方的棋子可能补齐了对手的包围圈
+  const oppWin = checkSurroundWin(board, opponent(player));
+  if (oppWin) {
+    var oppSize = board.length;
+    var oppOnEdge = (oppWin.target.r === 0 || oppWin.target.r === oppSize - 1 ||
+                      oppWin.target.c === 0 || oppWin.target.c === oppSize - 1);
+    var oppReason;
+    if (oppWin.orthogonal) oppReason = oppOnEdge ? '边缘十字围' : '十字围';
+    else oppReason = oppOnEdge ? '边缘斜角围' : '斜角围';
+    return {
+      gameOver: true,
+      winner: opponent(player),
+      reason: oppReason,
+      rule: oppWin.orthogonal ? 1 : 2,
+      winTarget: oppWin.target,
+      winStones: oppWin.stones
+    };
+  }
+
   return { gameOver: false };
 }
 
