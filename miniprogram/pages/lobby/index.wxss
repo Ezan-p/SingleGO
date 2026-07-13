@@ -169,25 +169,3 @@
 .btn-disabled {
   opacity: 0.6;
 }
-
-/* 匹配中状态 */
-.matching-status {
-  margin-top: 30rpx;
-  text-align: center;
-}
-
-.matching-text {
-  font-size: 28rpx;
-  color: rgba(255, 248, 232, 0.9);
-  display: block;
-  margin-bottom: 16rpx;
-}
-
-.matching-cancel {
-  display: inline-block;
-  padding: 16rpx 40rpx;
-  background: rgba(244, 67, 54, 0.85);
-  color: #fff;
-  border-radius: 40rpx;
-  font-size: 28rpx;
-}

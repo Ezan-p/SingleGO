@@ -23,6 +23,7 @@ Page({
   unsubscribeNet: null,
 
   onLoad: function () {
+    app.globalData.matchJustCanceled = false;
     this.unsubscribeNet = network.onNetworkChange((status) => {
       this.setData({
         netConnected: status.connected,
@@ -34,7 +35,13 @@ Page({
   onShow: function () {
     this.loadLocalProfile();
     this.syncCloudProfile();
-    this.checkMatchingStatus();
+    // 若用户刚从匹配页取消返回，优先清空本地匹配状态，避免服务端状态同步延迟导致按钮仍显示"匹配中"
+    if (app.globalData.matchJustCanceled) {
+      this.setData({ matching: false });
+      app.globalData.matchJustCanceled = false;
+    } else {
+      this.checkMatchingStatus();
+    }
   },
 
   onUnload: function () {
@@ -115,15 +122,6 @@ Page({
     if (this.data.matching) return;
     this.setData({ matching: true });
     wx.navigateTo({ url: '/pages/match/index' });
-  },
-
-  onCancelMatch: function () {
-    onlineMatch.cancelMatch().then(() => {
-      this.setData({ matching: false });
-      wx.showToast({ title: '已取消匹配', icon: 'success' });
-    }).catch(() => {
-      wx.showToast({ title: '取消失败', icon: 'none' });
-    });
   },
 
   onViewRecords: function () {

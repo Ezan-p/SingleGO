@@ -36,8 +36,9 @@ Page({
   onUnload: function () {
     this.clearTimers();
     this.closeWatcher();
-    // 页面关闭时若仍在匹配中，取消匹配
+    // 页面关闭时若仍在匹配中，取消匹配并标记，返回大厅后不再显示"匹配中"
     if (!this.data.matched && !this.data.joining) {
+      app.globalData.matchJustCanceled = true;
       onlineMatch.cancelMatch().catch(() => {});
     }
   },
@@ -208,10 +209,12 @@ Page({
       if (res.result && res.result.code === 200) {
         wx.showToast({ title: '已取消匹配', icon: 'success' });
       }
+      // 标记已取消，大厅 onShow 看到后会立即将"开始匹配"按钮恢复
+      app.globalData.matchJustCanceled = true;
       setTimeout(() => wx.navigateBack(), 800);
     }).catch(() => {
-      wx.showToast({ title: '取消失败', icon: 'none' });
-      setTimeout(() => wx.navigateBack(), 1000);
+      wx.showToast({ title: '取消失败，请重试', icon: 'none' });
+      // 取消失败时留在当前页，让用户可以再次点击取消
     });
   },
 

@@ -28,7 +28,6 @@
     <text class="text-line">· 每回合只能落下一枚棋子，落子后不可移动或移除。</text>
     <text class="text-line">· 对局结束后禁止继续落子。</text>
     <text class="text-line text-emphasis">判负规则优先于胜利规则。</text>
-    <text class="text-line text-emphasis">{{symmetryNote}}</text>
   </view>
 
   <!-- 示意图列表 -->
