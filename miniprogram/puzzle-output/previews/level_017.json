@@ -1,0 +1,190 @@
+{
+  "id": 17,
+  "name": "残局 017",
+  "boardSize": 9,
+  "difficulty": "easy",
+  "playerColor": "black",
+  "aiColor": "white",
+  "currentTurn": "black",
+  "aiLevel": "easy",
+  "humanColor": 1,
+  "aiColorNum": 2,
+  "firstPlayer": 1,
+  "board": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      2,
+      1,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      1,
+      1
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      1,
+      0,
+      0
+    ]
+  ],
+  "sourceImage": "92ddad98173a14a41df4540177858aba.jpg",
+  "crop": {
+    "top": 0,
+    "left": 2,
+    "size": 9
+  },
+  "blackStones": [
+    [
+      5,
+      3
+    ],
+    [
+      5,
+      4
+    ],
+    [
+      6,
+      5
+    ],
+    [
+      6,
+      6
+    ],
+    [
+      7,
+      7
+    ],
+    [
+      7,
+      8
+    ],
+    [
+      8,
+      6
+    ]
+  ],
+  "whiteStones": [
+    [
+      4,
+      4
+    ],
+    [
+      5,
+      5
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      6,
+      4
+    ],
+    [
+      7,
+      5
+    ],
+    [
+      8,
+      4
+    ],
+    [
+      8,
+      5
+    ]
+  ],
+  "blackCount": 7,
+  "whiteCount": 7,
+  "stoneCount": 14,
+  "validation": {
+    "notTerminal": true,
+    "blackNoOneStepWin": true,
+    "whiteNoOneStepWin": true,
+    "hasLegalMove": true,
+    "balanced": true
+  }
+}

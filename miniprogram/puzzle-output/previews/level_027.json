@@ -1,0 +1,198 @@
+{
+  "id": 27,
+  "name": "残局 027",
+  "boardSize": 9,
+  "difficulty": "normal",
+  "playerColor": "black",
+  "aiColor": "white",
+  "currentTurn": "black",
+  "aiLevel": "normal",
+  "humanColor": 1,
+  "aiColorNum": 2,
+  "firstPlayer": 1,
+  "board": [
+    [
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      2,
+      0,
+      1,
+      0,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      1,
+      2,
+      2,
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      1,
+      0,
+      2,
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "sourceImage": "微信图片_20260710223338_106_392.jpg",
+  "crop": {
+    "top": 6,
+    "left": 5,
+    "size": 9
+  },
+  "blackStones": [
+    [
+      0,
+      6
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      1,
+      7
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      4,
+      6
+    ]
+  ],
+  "whiteStones": [
+    [
+      0,
+      4
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      2,
+      5
+    ],
+    [
+      2,
+      6
+    ],
+    [
+      3,
+      7
+    ],
+    [
+      4,
+      4
+    ]
+  ],
+  "blackCount": 8,
+  "whiteCount": 8,
+  "stoneCount": 16,
+  "validation": {
+    "notTerminal": true,
+    "blackNoOneStepWin": true,
+    "whiteNoOneStepWin": true,
+    "hasLegalMove": true,
+    "balanced": true
+  }
+}

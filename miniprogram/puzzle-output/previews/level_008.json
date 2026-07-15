@@ -1,0 +1,166 @@
+{
+  "id": 8,
+  "name": "残局 008",
+  "boardSize": 9,
+  "difficulty": "easy",
+  "playerColor": "black",
+  "aiColor": "white",
+  "currentTurn": "black",
+  "aiLevel": "easy",
+  "humanColor": 1,
+  "aiColorNum": 2,
+  "firstPlayer": 1,
+  "board": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      2
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "sourceImage": "微信图片_20260710223322_88_392.jpg",
+  "crop": {
+    "top": 5,
+    "left": 0,
+    "size": 9
+  },
+  "blackStones": [
+    [
+      1,
+      6
+    ],
+    [
+      1,
+      7
+    ],
+    [
+      2,
+      7
+    ],
+    [
+      2,
+      8
+    ]
+  ],
+  "whiteStones": [
+    [
+      3,
+      6
+    ],
+    [
+      3,
+      7
+    ],
+    [
+      4,
+      7
+    ],
+    [
+      4,
+      8
+    ]
+  ],
+  "blackCount": 4,
+  "whiteCount": 4,
+  "stoneCount": 8,
+  "validation": {
+    "notTerminal": true,
+    "blackNoOneStepWin": true,
+    "whiteNoOneStepWin": true,
+    "hasLegalMove": true,
+    "balanced": true
+  }
+}

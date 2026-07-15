@@ -1,0 +1,178 @@
+{
+  "id": 44,
+  "name": "残局 044",
+  "boardSize": 7,
+  "difficulty": "normal",
+  "playerColor": "black",
+  "aiColor": "white",
+  "currentTurn": "black",
+  "aiLevel": "normal",
+  "humanColor": 1,
+  "aiColorNum": 2,
+  "firstPlayer": 1,
+  "board": [
+    [
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      2,
+      0,
+      1,
+      1
+    ],
+    [
+      0,
+      0,
+      2,
+      2,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      2,
+      1,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      1,
+      2,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      2,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      1
+    ]
+  ],
+  "sourceImage": "微信图片_20260710223346_115_392.jpg",
+  "crop": {
+    "top": 6,
+    "left": 4,
+    "size": 7
+  },
+  "blackStones": [
+    [
+      0,
+      4
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      1,
+      6
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      4,
+      3
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      5,
+      5
+    ],
+    [
+      6,
+      4
+    ],
+    [
+      6,
+      6
+    ]
+  ],
+  "whiteStones": [
+    [
+      1,
+      3
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      5,
+      4
+    ]
+  ],
+  "blackCount": 10,
+  "whiteCount": 10,
+  "stoneCount": 20,
+  "validation": {
+    "notTerminal": true,
+    "blackNoOneStepWin": true,
+    "whiteNoOneStepWin": true,
+    "hasLegalMove": true,
+    "balanced": true
+  }
+}

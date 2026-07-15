@@ -35,6 +35,9 @@ Page({
   onAIBattle() {
     wx.navigateTo({ url: '/pages/ai-setup/ai-setup' })
   },
+  onChallenge() {
+    wx.navigateTo({ url: '/pages/challenge/index' })
+  },
   onRules() {
     wx.navigateTo({ url: '/pages/rules/rules' })
   },

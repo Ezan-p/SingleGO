@@ -1,0 +1,125 @@
+<view class="game-page">
+  <!-- 状态栏 -->
+  <view class="status-bar">
+    <view class="player-indicator">
+      <view class="stone-dot {{currentPlayer === 1 ? 'dot-black' : 'dot-white'}}"></view>
+      <text class="status-text" wx:if="{{!gameOver && currentPlayer === humanPlayer}}">你的回合</text>
+      <text class="status-text" wx:elif="{{!gameOver}}">AI回合</text>
+      <text class="status-text" wx:else>{{winner === humanPlayer ? '你胜了' : '挑战失败'}}</text>
+    </view>
+    <text class="move-count">{{levelName}} · 第 {{moveCount}} 手</text>
+  </view>
+
+  <!-- 关卡信息条 -->
+  <view class="ai-info-bar">
+    <text class="info-item">难度：{{difficultyName}}</text>
+    <text class="info-sep">|</text>
+    <text class="info-item">你执{{humanPlayer === 1 ? '黑' : '白'}}</text>
+    <text class="info-sep" wx:if="{{elapsed}}">|</text>
+    <text class="info-item" wx:if="{{elapsed}}">用时 {{elapsed}}</text>
+  </view>
+
+  <!-- 棋盘 -->
+  <view class="board-wrapper" style="width:{{boardPx}}px;height:{{boardPx}}px;padding:{{halfCellPx}}px;">
+    <view class="board-grid" style="width:{{gridPx}}px;height:{{gridPx}}px;background-size:{{cellPx}}px {{cellPx}}px;background-position:{{halfCellPx}}px {{halfCellPx}}px;">
+      <view
+        wx:for="{{cells}}"
+        wx:key="key"
+        class="cell"
+        style="width:{{cellPx}}px;height:{{cellPx}}px;"
+        data-r="{{item.r}}"
+        data-c="{{item.c}}"
+        bindtap="onCellTap">
+        <view wx:if="{{item.isStar}}" class="star-dot"></view>
+        <view wx:if="{{item.v === 1}}" class="stone stone-black"></view>
+        <view wx:elif="{{item.v === 2}}" class="stone stone-white"></view>
+        <view wx:if="{{item.isLast}}" class="last-marker"></view>
+        <view wx:if="{{item.isPending}}" class="pending-stone {{humanPlayer === 1 ? 'pending-black' : 'pending-white'}}"></view>
+        <view wx:if="{{item.isWinTarget}}" class="win-target-marker"></view>
+        <view wx:if="{{item.isWinStone}}" class="win-stone-marker"></view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 结果横幅 -->
+  <view class="result-banner" wx:if="{{gameOver}}">
+    <text class="result-title">{{winner === humanPlayer ? '恭喜获胜' : '挑战失败'}}</text>
+    <text class="result-reason">{{winReason}}</text>
+  </view>
+
+  <!-- 控制按钮 -->
+  <view class="controls">
+    <view class="btn btn-secondary ctrl-btn {{(!canUndo || aiThinking) ? 'ctrl-btn-disabled' : ''}}" bindtap="onUndo">{{undoBtnText}}</view>
+    <view class="btn btn-primary ctrl-btn" bindtap="onRestart">重新开始</view>
+    <view class="btn btn-secondary ctrl-btn" bindtap="onBackSelect">返回选关</view>
+  </view>
+
+  <!-- 自定义结算弹窗 -->
+  <view class="result-modal" wx:if="{{showResult}}">
+    <view class="result-mask"></view>
+    <view class="result-card">
+      <view class="result-title-wrap">
+        <text class="result-title {{resultWon ? 'title-win' : 'title-lose'}}">{{resultWon ? '通关成功' : '挑战失败'}}</text>
+      </view>
+
+      <!-- 获胜信息 -->
+      <view wx:if="{{resultWon}}" class="result-info-grid">
+        <view class="info-col">
+          <text class="info-label">获胜方式</text>
+          <text class="info-value">{{resultReason}}</text>
+        </view>
+        <view class="info-divider"></view>
+        <view class="info-col">
+          <text class="info-label">用时</text>
+          <text class="info-value">{{resultElapsed}}</text>
+        </view>
+        <view class="info-divider"></view>
+        <view class="info-col">
+          <text class="info-label">落子总数</text>
+          <text class="info-value">{{resultMoves}}手</text>
+        </view>
+      </view>
+
+      <!-- 失败原因 -->
+      <view wx:else class="result-reason-box">
+        <text class="info-label">失败原因</text>
+        <text class="result-reason-text">{{resultReason}}</text>
+      </view>
+
+      <!-- 获胜时按钮（下一关 / 重玩 / 选关） -->
+      <view wx:if="{{resultWon}}" class="result-actions">
+        <view wx:if="{{showNextLevel}}" class="btn btn-primary result-btn" bindtap="onResultNext">下一关</view>
+        <view class="btn btn-secondary result-btn" bindtap="onResultReplay">重玩本关</view>
+        <view class="btn btn-secondary result-btn" bindtap="onResultHome">返回选关</view>
+      </view>
+
+      <!-- 失败时按钮（重新挑战 / 悔棋 / 选关） -->
+      <view wx:else class="result-actions result-actions-three">
+        <view class="btn btn-primary result-btn" bindtap="onResultRetry">重新挑战</view>
+        <view class="btn btn-secondary result-btn" bindtap="onResultUndo">{{undoBtnText}}</view>
+        <view class="btn btn-secondary result-btn" bindtap="onResultHome">返回选关</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 模拟广告弹窗（复用系统对战） -->
+  <view class="mock-ad-modal" wx:if="{{showMockAd}}">
+    <view class="mock-ad-content">
+      <text class="mock-ad-title">广告播放中...</text>
+      <text class="mock-ad-countdown">{{mockAdCountdown}}</text>
+    </view>
+  </view>
+
+  <!-- 悔棋广告提示弹窗（复用系统对战） -->
+  <view class="undo-ad-modal" wx:if="{{showUndoAdModal}}">
+    <view class="undo-ad-backdrop" bindtap="onCancelAd"></view>
+    <view class="undo-ad-panel">
+      <text class="undo-ad-title">悔棋次数已用完</text>
+      <text class="undo-ad-desc">观看完整视频广告，可立即获得一次悔棋机会。</text>
+      <view class="undo-ad-actions">
+        <view class="btn btn-secondary undo-ad-btn" bindtap="onCancelAd">取消</view>
+        <view class="btn btn-primary undo-ad-btn" bindtap="onWatchAd">观看广告</view>
+      </view>
+    </view>
+  </view>
+</view>

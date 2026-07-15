@@ -1,0 +1,122 @@
+{
+  "id": 6,
+  "name": "残局 006",
+  "boardSize": 7,
+  "difficulty": "easy",
+  "playerColor": "black",
+  "aiColor": "white",
+  "currentTurn": "black",
+  "aiLevel": "easy",
+  "humanColor": 1,
+  "aiColorNum": 2,
+  "firstPlayer": 1,
+  "board": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      2,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      2,
+      1,
+      0,
+      0,
+      0
+    ]
+  ],
+  "sourceImage": "微信图片_20260710223406_137_392.jpg",
+  "crop": {
+    "top": 0,
+    "left": 6,
+    "size": 7
+  },
+  "blackStones": [
+    [
+      4,
+      3
+    ],
+    [
+      5,
+      4
+    ],
+    [
+      6,
+      3
+    ]
+  ],
+  "whiteStones": [
+    [
+      4,
+      1
+    ],
+    [
+      5,
+      2
+    ],
+    [
+      6,
+      2
+    ]
+  ],
+  "blackCount": 3,
+  "whiteCount": 3,
+  "stoneCount": 6,
+  "validation": {
+    "notTerminal": true,
+    "blackNoOneStepWin": true,
+    "whiteNoOneStepWin": true,
+    "hasLegalMove": true,
+    "balanced": true
+  }
+}

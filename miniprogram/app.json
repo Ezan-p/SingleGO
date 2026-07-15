@@ -10,6 +10,8 @@
     "pages/game/game",
     "pages/ai-setup/ai-setup",
     "pages/game-ai/game-ai",
+    "pages/challenge/index",
+    "pages/challenge-game/index",
     "pages/rules/rules",
     "pages/settings/settings",
     "pages/profile/profile"

@@ -19,6 +19,7 @@
       <view class="btn btn-primary start-btn" bindtap="onFriendBattle">好友对战</view>
       <view class="btn btn-primary start-btn" bindtap="onOnlineBattle">联网对战</view>
       <view class="btn btn-primary start-btn" bindtap="onAIBattle">系统对战</view>
+      <view class="btn btn-primary start-btn" bindtap="onChallenge">残局闯关</view>
       <view class="btn btn-primary start-btn" bindtap="onRules">规则说明</view>
       <view class="btn btn-primary start-btn" bindtap="onSettings">设置</view>
     </view>

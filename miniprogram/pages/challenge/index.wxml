@@ -1,0 +1,60 @@
+<view class="container">
+  <!-- 用户/返回入口 -->
+  <view class="top-bar">
+    <view class="back-btn" bindtap="onBackHome">‹ 返回</view>
+    <text class="page-title">残局闯关</text>
+    <view class="top-placeholder"></view>
+  </view>
+
+  <!-- 统计条 -->
+  <view class="stat-card">
+    <view class="stat-item">
+      <text class="stat-value">{{highestCleared > 0 ? ('第' + highestCleared + '关') : '暂无'}}</text>
+      <text class="stat-label">最高通关记录</text>
+    </view>
+    <view class="stat-divider"></view>
+    <view class="stat-item">
+      <text class="stat-value">{{clearedCount}}/{{total}}</text>
+      <text class="stat-label">已通关</text>
+    </view>
+    <view class="stat-divider"></view>
+    <view class="stat-item">
+      <text class="stat-value">第{{unlockedMax}}关</text>
+      <text class="stat-label">已解锁</text>
+    </view>
+  </view>
+
+  <view class="hint">每通关一关自动解锁下一关，已通关关卡可随时重玩。</view>
+
+  <!-- 管理操作 -->
+  <view class="manage-row">
+    <view class="manage-btn" bindtap="onUnlockAll">开放全部关卡</view>
+    <view class="manage-btn manage-btn-danger" bindtap="onResetProgress">重置进度</view>
+  </view>
+
+  <!-- 关卡网格 -->
+  <view class="grid">
+    <block wx:for="{{levels}}" wx:key="id">
+      <view wx:if="{{item.showHeader}}" class="tier-header tier-{{item.difficulty}}">
+        <text class="tier-name">{{item.tierName}}</text>
+        <text class="tier-sub">{{item.difficulty === 'easy' ? '入门' : (item.difficulty === 'normal' ? '进阶' : (item.difficulty === 'hard' ? '高手' : '大师'))}} · 残局</text>
+      </view>
+      <view
+        class="level-cell level-{{item.state}} tier-{{item.difficulty}}"
+        data-id="{{item.id}}"
+        data-state="{{item.state}}"
+        bindtap="onLevelTap">
+        <block wx:if="{{item.state === 'locked'}}">
+          <text class="lock-icon">🔒</text>
+        </block>
+        <block wx:elif="{{item.state === 'cleared'}}">
+          <text class="cell-num">{{item.id}}</text>
+          <text class="check-icon">✓</text>
+        </block>
+        <block wx:else>
+          <text class="cell-num">{{item.id}}</text>
+        </block>
+      </view>
+    </block>
+  </view>
+</view>
