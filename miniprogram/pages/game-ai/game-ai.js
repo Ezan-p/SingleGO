@@ -299,7 +299,7 @@ Page({
     this.setData({ aiThinking: true });
     this.aiTimer = setTimeout(function () {
       self.aiTimer = null;
-      const mv = ai.chooseMove(self.board, self.data.aiPlayer, self.data.difficulty);
+      const mv = ai.chooseMove(self.board, self.data.aiPlayer, self.data.difficulty, { lastMove: self.data.lastMove });
       self.setData({ aiThinking: false });
       if (mv) {
         self.placePiece(mv.r, mv.c);

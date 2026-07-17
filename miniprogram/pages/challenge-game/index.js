@@ -287,7 +287,7 @@ Page({
     this.setData({ aiThinking: true });
     this.aiTimer = setTimeout(function () {
       self.aiTimer = null;
-      const mv = ai.chooseMove(self.board, self.data.aiPlayer, self._level.aiLevel);
+      const mv = ai.chooseMove(self.board, self.data.aiPlayer, self._level.aiLevel, { lastMove: self.data.lastMove });
       self.setData({ aiThinking: false });
       if (mv) {
         self.placePiece(mv.r, mv.c);

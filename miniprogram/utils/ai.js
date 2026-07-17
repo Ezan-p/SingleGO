@@ -111,6 +111,202 @@ function findBlockingMove(board, player, candidates) {
   return null;
 }
 
+// 找当前玩家所有一步获胜位置（不止第一个）
+function findAllWinningMoves(board, player, candidates) {
+  var cands = candidates || candidateMoves(board, 1);
+  var res = [];
+  for (var i = 0; i < cands.length; i++) {
+    if (wouldWin(board, cands[i].r, cands[i].c, player)) res.push(cands[i]);
+  }
+  return res;
+}
+
+// ===== 规则补充策略 =====
+
+// ===== 指定陷阱防守（相对模板 + 旋转/镜像变体） =====
+//
+// 思路：把黑方陷阱棋形抽象为「以白棋为中心的相对坐标模板」，再生成该模板在
+// 正方形二面体群 D4 下的全部旋转/镜像变体。白方 AI 对每个白棋中心、每个变体
+// 做模板匹配；一旦匹配，就落在模板标记的 defense 防守点。
+// 这样无论陷阱出现在哪个方向（左/右/上/下、旋转 90/180/270、水平/垂直镜像），
+// AI 都能在陷阱启动前提前堵住关键点，而不是只识别固定一侧。
+
+// 调试日志开关：打开后可确认 AI 是否识别到陷阱棋形（落子决策时输出）
+var TRAP_DEBUG = true;
+
+// 核心陷阱棋形（相对中心白棋的坐标：dx 向右为正，dy 向下为正）
+//   中心白棋被上下黑子夹击，右上方有黑子延伸威胁，左侧空位即黑方陷阱启动点。
+//   标记为 role:'defense' 的 EMPTY 单元格即白方应优先落子的防守点。
+// 注意：此处使用相对坐标，不使用任何绝对坐标；具体防守点由模板决定，不写死。
+var TRAP_BASE_PATTERN = [
+  { dx: 0,  dy: 0,  value: WHITE },                 // 中心：白棋
+  { dx: 0,  dy: -1, value: BLACK },                 // 上方：黑
+  { dx: 0,  dy: 1,  value: BLACK },                 // 下方：黑
+  { dx: 1,  dy: -1, value: BLACK },                 // 右上：黑
+  { dx: -1, dy: 0,  value: EMPTY, role: 'defense' } // 左侧：空（防守点）
+];
+
+// 棋形中棋子值 → 实际棋盘值的映射（白方防守时为单位映射；保留接口以便复用模板）
+var TRAP_PLAYER_MAP = {};
+TRAP_PLAYER_MAP[EMPTY] = EMPTY;
+TRAP_PLAYER_MAP[BLACK] = BLACK;
+TRAP_PLAYER_MAP[WHITE] = WHITE;
+
+// 正方形的二面体群 D4：4 个旋转 × {单位, 水平镜像}，覆盖陷阱所有方向变体
+var TRAP_TRANSFORMS = [
+  { name: '原始',             fn: function (p) { return { dx: p.dx, dy: p.dy }; } },
+  { name: '旋转90°',          fn: function (p) { return { dx: -p.dy, dy: p.dx }; } },
+  { name: '旋转180°',         fn: function (p) { return { dx: -p.dx, dy: -p.dy }; } },
+  { name: '旋转270°',         fn: function (p) { return { dx: p.dy, dy: -p.dx }; } },
+  { name: '水平镜像',          fn: function (p) { return { dx: -p.dx, dy: p.dy }; } },
+  { name: '水平镜像+旋转90°',  fn: function (p) { return { dx: p.dy, dy: p.dx }; } },
+  { name: '水平镜像+旋转180°', fn: function (p) { return { dx: p.dx, dy: -p.dy }; } },
+  { name: '水平镜像+旋转270°', fn: function (p) { return { dx: -p.dy, dy: -p.dx }; } }
+];
+
+// 对基模板应用一次坐标变换，得到新模板（保留 value 与 role）
+function transformPattern(basePattern, fn) {
+  var out = [];
+  for (var i = 0; i < basePattern.length; i++) {
+    var cell = basePattern[i];
+    var t = fn(cell);
+    var nc = { dx: t.dx, dy: t.dy, value: cell.value };
+    if (cell.role) nc.role = cell.role;
+    out.push(nc);
+  }
+  return out;
+}
+
+// 模板规范化键：按 (dy,dx) 排序后拼接，用于在变体生成时去重
+function patternKey(pattern) {
+  var cells = pattern.slice().sort(function (a, b) {
+    if (a.dy !== b.dy) return a.dy - b.dy;
+    return a.dx - b.dx;
+  });
+  return cells.map(function (c) {
+    return c.dx + ',' + c.dy + ',' + c.value + ',' + (c.role || '');
+  }).join('|');
+}
+
+// 生成去重后的所有方向变体
+function generatePatternVariants(basePattern) {
+  var seen = {};
+  var variants = [];
+  for (var i = 0; i < TRAP_TRANSFORMS.length; i++) {
+    var t = TRAP_TRANSFORMS[i];
+    var pat = transformPattern(basePattern, t.fn);
+    var key = patternKey(pat);
+    if (seen[key]) continue;
+    seen[key] = true;
+    variants.push({ name: t.name, cells: pat });
+  }
+  return variants;
+}
+
+// 取模板中标记的防守点（role === 'defense' 的单元格）
+function getDefenseCell(pattern) {
+  for (var i = 0; i < pattern.length; i++) {
+    if (pattern[i].role === 'defense') return pattern[i];
+  }
+  return null;
+}
+
+// 以 (centerX, centerY) 为中心，检测棋盘是否符合相对坐标模板。
+// playerMap 将模板中的棋子值映射到实际棋盘值；未映射时按原值比较。
+// 任一单元格越界或棋子值不符即返回 false。
+function matchPatternAroundPiece(board, centerX, centerY, pattern, playerMap) {
+  var size = board.length;
+  for (var i = 0; i < pattern.length; i++) {
+    var cell = pattern[i];
+    var x = centerX + cell.dx;
+    var y = centerY + cell.dy;
+    if (x < 0 || y < 0 || x >= size || y >= size) return false;
+    var expected = (playerMap && playerMap[cell.value] !== undefined)
+      ? playerMap[cell.value]
+      : cell.value;
+    if (board[y][x] !== expected) return false;
+  }
+  return true;
+}
+
+// 模块加载时生成一次全部变体（避免每次决策重复计算）
+var TRAP_VARIANTS = generatePatternVariants(TRAP_BASE_PATTERN);
+
+// 指定陷阱防守（模板 + 旋转/镜像变体）：白方防守黑方同类陷阱的所有方向。
+// 返回真实棋盘坐标 {r, c} 或 null。多个相同棋形时优先选择距离 lastMove 最近的防守点。
+// 说明：仅针对白方防守黑方该固定棋形；防守点若被占用则棋形不成立（模板要求该格为 EMPTY）。
+function detectSpecificWhiteDefenseMove(board, lastMove) {
+  var size = board.length;
+  var best = null, bestDist = Infinity;
+  if (TRAP_DEBUG) console.log('检测指定陷阱模板');
+  for (var r = 0; r < size; r++) {
+    for (var c = 0; c < size; c++) {
+      if (board[r][c] !== WHITE) continue; // 中心必须是白棋
+      for (var v = 0; v < TRAP_VARIANTS.length; v++) {
+        var variant = TRAP_VARIANTS[v];
+        if (matchPatternAroundPiece(board, c, r, variant.cells, TRAP_PLAYER_MAP)) {
+          var def = getDefenseCell(variant.cells);
+          if (!def) break;
+          var defX = c + def.dx;
+          var defY = r + def.dy;
+          if (TRAP_DEBUG) {
+            console.log('匹配到的中心白棋:', c, r);
+            console.log('匹配到的模板方向:', variant.name);
+            console.log('推荐防守点:', defX, defY);
+          }
+          var dist = 0;
+          if (lastMove && typeof lastMove.r === 'number' && typeof lastMove.c === 'number') {
+            dist = Math.abs(defY - lastMove.r) + Math.abs(defX - lastMove.c);
+          }
+          if (dist < bestDist) { bestDist = dist; best = { r: defY, c: defX }; }
+          break; // 该中心已匹配一个变体，无需再试其余变体
+        }
+      }
+    }
+  }
+  if (TRAP_DEBUG && !best) console.log('未匹配到指定陷阱');
+  return best;
+}
+
+// 通用两步陷阱预判：识别对手「下一步制造强制威胁、再下一步绝杀」的二步陷阱启动点
+// 若发现，返回 AI 当前应占据/破坏的 trapStart {r, c}；否则返回 null。
+// 仅扩展检测逻辑，不修改基础胜负规则（复用 dango.evaluateMove / wouldWin / wouldLose）。
+function detectTwoStepTrapMove(board, aiPlayer, opponentPlayer) {
+  var oppMoves = candidateMoves(board, 1);
+  if (oppMoves.length === 0) oppMoves = legalMoves(board);
+  if (oppMoves.length === 0) return null;
+
+  for (var i = 0; i < oppMoves.length; i++) {
+    var trapStart = oppMoves[i];
+
+    // 4. 对方落子 trapStart 触发自身判负 → 跳过
+    if (wouldLose(board, trapStart.r, trapStart.c, opponentPlayer)) continue;
+    // 5. 对方该步已直接获胜 → 由立即防守逻辑处理，本函数跳过
+    if (wouldWin(board, trapStart.r, trapStart.c, opponentPlayer)) continue;
+
+    // 6. 模拟对方落子后，查找对方下一步可直接获胜的所有位置
+    var nb = simulate(board, trapStart.r, trapStart.c, opponentPlayer);
+    var threatMoves = findAllWinningMoves(nb, opponentPlayer);
+    // 7. 威胁点少于 2 个，AI 只需防住其一即可，跳过该 trapStart
+    if (threatMoves.length < 2) continue;
+
+    // 8~9. 逐一模拟 AI 防守各威胁点，若任一防守后仍留下对方直接获胜点 → 二步陷阱
+    var isTrap = false;
+    for (var j = 0; j < threatMoves.length; j++) {
+      var t = threatMoves[j];
+      if (wouldLose(nb, t.r, t.c, aiPlayer)) continue; // 防守点自损则试下一点
+      var nb2 = simulate(nb, t.r, t.c, aiPlayer);
+      if (findWinningMove(nb2, opponentPlayer, candidateMoves(nb2, 1))) {
+        isTrap = true;
+        break;
+      }
+    }
+    // 10. 当前 AI 应返回 trapStart 作为优先防守位置
+    if (isTrap) return { r: trapStart.r, c: trapStart.c };
+  }
+  return null;
+}
+
 // 落子后对手是否立即拥有一步获胜点（高风险落点检测，规则 7.1 第 4 条）
 function givesOpponentWin(board, aiMove, aiPlayer) {
   var opp = dango.opponent(aiPlayer);
@@ -288,20 +484,33 @@ function negamax(board, player, depth, alpha, beta, aiPlayer, deadline, candLimi
 
 // 带迭代加深的搜索主流程（困难 / 大师共用）
 function searchMove(board, aiPlayer, opts) {
+  var opp = dango.opponent(aiPlayer);
+
   // 1. 一步直接获胜（规则 7.1 第 1 条）
   var win = findWinningMove(board, aiPlayer, candidateMoves(board, 1));
   if (win) return win;
 
-  // 2. 阻止对手一步获胜（规则 7.1 第 2 条），且不能自损
+  // 2. 阻止对手一步获胜（普通防守，规则 7.1 第 2 条），且不能自损。
+  //    立即获胜威胁优先级高于陷阱预判：若黑方下一手可直接获胜，必须立即堵住。
   var block = findBlockingMove(board, aiPlayer, candidateMoves(board, 1));
   if (block && !wouldLose(board, block.r, block.c, aiPlayer)) return block;
+
+  // 3. 指定陷阱防守（仅白方）：识别黑方同类陷阱的「旋转/镜像」所有方向变体，
+  //    提前堵住陷阱启动点；优先级高于普通进攻/普通防守/中心占位/随机落子。
+  if (aiPlayer === WHITE) {
+    var specDef = detectSpecificWhiteDefenseMove(board, opts.lastMove);
+    if (specDef && !wouldLose(board, specDef.r, specDef.c, aiPlayer)) return specDef;
+  }
+
+  // 4. 通用两步陷阱预判：占据/破坏对手的二步陷阱启动点（优先于常规搜索）
+  var trap = detectTwoStepTrapMove(board, aiPlayer, opp);
+  if (trap && !wouldLose(board, trap.r, trap.c, aiPlayer)) return trap;
 
   var deadline = Date.now() + opts.budget;
   var cands = orderedCandidates(board, aiPlayer, opts.candLimit, aiPlayer);
   if (cands.length === 0) cands = legalMoves(board);
   if (cands.length === 0) return null;
 
-  var opp = dango.opponent(aiPlayer);
   var best = cands[0];
 
   // 迭代加深：2 层起步，逐层加深，超时即采用已得结果（控制计算时间，避免卡顿）
@@ -416,13 +625,15 @@ function chooseNormal(board, aiPlayer) {
 }
 
 // 困难：预测 2~3 步；主动制造围子机会、识别双重威胁；规避所有判负；利用边缘；搜索深度 3 层
-function chooseHard(board, aiPlayer) {
-  return searchMove(board, aiPlayer, { maxPly: 3, candLimit: 10, budget: 350 });
+function chooseHard(board, aiPlayer, opts) {
+  opts = opts || {};
+  return searchMove(board, aiPlayer, { maxPly: 3, candLimit: 10, budget: 350, lastMove: opts.lastMove });
 }
 
 // 大师：完整极小化极大 + Alpha-Beta + 候选剪枝 + 迭代加深（≥4 层）；不随机；控制计算时间
-function chooseMaster(board, aiPlayer) {
-  return searchMove(board, aiPlayer, { maxPly: 4, candLimit: 12, budget: 700 });
+function chooseMaster(board, aiPlayer, opts) {
+  opts = opts || {};
+  return searchMove(board, aiPlayer, { maxPly: 4, candLimit: 12, budget: 700, lastMove: opts.lastMove });
 }
 
 // ===== 主入口 =====
@@ -436,7 +647,7 @@ function chooseMove(board, aiPlayer, difficulty, opts) {
   else if (difficulty === 'master') fn = chooseMaster;
   else fn = chooseNormal;
 
-  var move = fn(board, aiPlayer);
+  var move = fn(board, aiPlayer, opts);
   if (!move) return null;
   return { r: move.r, c: move.c };
 }
@@ -451,5 +662,14 @@ module.exports = {
   wouldLose: wouldLose,
   findWinningMove: findWinningMove,
   findBlockingMove: findBlockingMove,
-  surroundProgress: surroundProgress
+  detectSpecificWhiteDefenseMove: detectSpecificWhiteDefenseMove,
+  detectTwoStepTrapMove: detectTwoStepTrapMove,
+  surroundProgress: surroundProgress,
+  // 模板陷阱相关（测试 / 复用）
+  TRAP_BASE_PATTERN: TRAP_BASE_PATTERN,
+  TRAP_VARIANTS: TRAP_VARIANTS,
+  TRAP_TRANSFORMS: TRAP_TRANSFORMS,
+  generatePatternVariants: generatePatternVariants,
+  matchPatternAroundPiece: matchPatternAroundPiece,
+  getDefenseCell: getDefenseCell
 };
