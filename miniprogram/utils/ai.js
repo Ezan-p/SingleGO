@@ -451,10 +451,7 @@ function orderedCandidates(board, player, limit, aiPlayer) {
 
 // ===== 极小化极大 + Alpha-Beta 剪枝（困难 / 大师共用） =====
 // 返回从当前 player 视角的最佳分值。aiPlayer 始终为评估基准。
-function negamax(board, player, depth, alpha, beta, aiPlayer, deadline, candLimit) {
-  if (Date.now() > deadline) {
-    return evaluateBoard(board, aiPlayer) * (player === aiPlayer ? 1 : -1);
-  }
+function negamax(board, player, depth, alpha, beta, aiPlayer, candLimit) {
   if (depth === 0) {
     return evaluateBoard(board, aiPlayer) * (player === aiPlayer ? 1 : -1);
   }
@@ -473,7 +470,7 @@ function negamax(board, player, depth, alpha, beta, aiPlayer, deadline, candLimi
       if (res.winner === player) val = WIN_SCORE - depth; // 越早赢越好
       else val = -WIN_SCORE + depth;                       // 越晚输越好
     } else {
-      val = -negamax(nb, opp, depth - 1, -beta, -alpha, aiPlayer, deadline, candLimit);
+      val = -negamax(nb, opp, depth - 1, -beta, -alpha, aiPlayer, candLimit);
     }
     if (val > best) best = val;
     if (best > alpha) alpha = best;
@@ -506,14 +503,13 @@ function searchMove(board, aiPlayer, opts) {
   var trap = detectTwoStepTrapMove(board, aiPlayer, opp);
   if (trap && !wouldLose(board, trap.r, trap.c, aiPlayer)) return trap;
 
-  var deadline = Date.now() + opts.budget;
   var cands = orderedCandidates(board, aiPlayer, opts.candLimit, aiPlayer);
   if (cands.length === 0) cands = legalMoves(board);
   if (cands.length === 0) return null;
 
   var best = cands[0];
 
-  // 迭代加深：2 层起步，逐层加深，超时即采用已得结果（控制计算时间，避免卡顿）
+  // 迭代加深：2 层起步，逐层加深至固定 maxPly（固定深度，保证不同设备/环境同局面同落子）
   for (var ply = 2; ply <= opts.maxPly; ply++) {
     var alpha = -WIN_SCORE * 2, beta = WIN_SCORE * 2;
     var bestVal = -Infinity;
@@ -528,7 +524,6 @@ function searchMove(board, aiPlayer, opts) {
     if (bi > 0) { var tmp = ordered[0]; ordered[0] = ordered[bi]; ordered[bi] = tmp; }
 
     for (var i = 0; i < ordered.length; i++) {
-      if (Date.now() > deadline) break;
       var m = ordered[i];
       var nb = simulate(board, m.r, m.c, aiPlayer);
       var res = dango.evaluateMove(nb, m.r, m.c, aiPlayer);
@@ -536,13 +531,12 @@ function searchMove(board, aiPlayer, opts) {
       if (res.gameOver) {
         val = res.winner === aiPlayer ? WIN_SCORE : -WIN_SCORE;
       } else {
-        val = -negamax(nb, opp, ply - 1, -beta, -alpha, aiPlayer, deadline, opts.candLimit);
+        val = -negamax(nb, opp, ply - 1, -beta, -alpha, aiPlayer, opts.candLimit);
       }
       if (val > bestVal) { bestVal = val; bestMove = m; }
       if (bestVal > alpha) alpha = bestVal;
     }
     best = bestMove;
-    if (Date.now() > deadline) break; // 超时停止加深
   }
   return best;
 }
@@ -627,13 +621,13 @@ function chooseNormal(board, aiPlayer) {
 // 困难：预测 2~3 步；主动制造围子机会、识别双重威胁；规避所有判负；利用边缘；搜索深度 3 层
 function chooseHard(board, aiPlayer, opts) {
   opts = opts || {};
-  return searchMove(board, aiPlayer, { maxPly: 3, candLimit: 10, budget: 350, lastMove: opts.lastMove });
+  return searchMove(board, aiPlayer, { maxPly: 3, candLimit: 10, lastMove: opts.lastMove });
 }
 
-// 大师：完整极小化极大 + Alpha-Beta + 候选剪枝 + 迭代加深（≥4 层）；不随机；控制计算时间
+// 大师：完整极小化极大 + Alpha-Beta + 候选剪枝 + 固定深度迭代加深（≥4 层）；不随机；固定深度保证跨设备一致
 function chooseMaster(board, aiPlayer, opts) {
   opts = opts || {};
-  return searchMove(board, aiPlayer, { maxPly: 4, candLimit: 12, budget: 700, lastMove: opts.lastMove });
+  return searchMove(board, aiPlayer, { maxPly: 4, candLimit: 12, lastMove: opts.lastMove });
 }
 
 // ===== 主入口 =====
