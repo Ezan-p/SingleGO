@@ -152,7 +152,7 @@ Page({
     } else if (this.data.gameOver) {
       text = '广告悔棋';
     } else {
-      text = '看广告获取次数';
+      text = '广告悔棋';
     }
     this.setData({ undoBtnText: text });
   },
@@ -475,23 +475,12 @@ Page({
         clearInterval(timer);
         self.setData({ showMockAd: false, mockAdCountdown: 3 });
 
-        if (self.data.gameOver) {
-          // 对局失败：看完广告自动悔一步，不增加悔棋次数
-          if (self._pendingUndo && self.history.length > 0) {
-            self.executeUndo();
-          }
-          self._pendingUndo = false;
-        } else {
-          // 对局进行中：看完广告获取 1 次悔棋机会
-          undoManager.add(1);
-          wx.showToast({ title: '已获得 1 次悔棋机会', icon: 'success', duration: 1500 });
-
-          // 自动执行悔棋（消耗刚获取的次数）
-          if (self._pendingUndo) {
-            self.executeUndo();
-            self._pendingUndo = false;
-          }
+        // 看完广告：自动悔棋一步，不增加悔棋次数（进行中 / 失败 一致）
+        if (self._pendingUndo && self.history.length > 0) {
+          self.executeUndo();
+          wx.showToast({ title: '已悔棋', icon: 'success', duration: 1500 });
         }
+        self._pendingUndo = false;
 
         // 更新悔棋次数显示与按钮文案
         self.setData({ undoCount: undoManager.getCount() });
