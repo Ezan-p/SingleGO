@@ -355,7 +355,8 @@ exports.makeMove = async (event, context) => {
     let winRule = null;
 
     if (result.gameOver) {
-      winner = result.winner;
+      // dango-logic 返回数值棋子(1=黑/2=白)，此处转为字符串颜色供后续逻辑使用
+      winner = result.winner === BLACK ? 'black' : 'white';
       winnerReason = result.reason;
       winRule = result.rule;
       if (result.winTarget) winTarget = result.winTarget;

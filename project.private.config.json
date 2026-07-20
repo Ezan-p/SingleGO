@@ -1,6 +1,6 @@
 {
-  "libVersion": "latest",
-  "projectname": "",
+  "libVersion": "3.15.2",
+  "projectname": "miniprogram-1",
   "condition": {},
   "setting": {
     "urlCheck": true,
