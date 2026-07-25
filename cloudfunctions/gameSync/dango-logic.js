@@ -43,6 +43,19 @@ function canPlace(board, r, c) {
   return inBounds(r, c, size) && board[r][c] === EMPTY;
 }
 
+// 随机选一个合法空点（用于超时系统的随机落子）。无可落子返回 null。
+function chooseRandomMove(board, player) {
+  const size = board.length;
+  const candidates = [];
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (board[r][c] === EMPTY) candidates.push({ r: r, c: c });
+    }
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 function placePiece(board, r, c, player) {
   board[r][c] = player;
 }
@@ -288,17 +301,23 @@ function checkConsecutiveRowsLoss(board, player) {
   return null;
 }
 
-// 主判定入口：按指定顺序检测
-// 1. 规则三（自包围判负）— 落子方自包围 → 落子方负
-// 2. 规则四（连续两排判负）— 落子方双排 → 落子方负
-// 3. 规则一/二（围子胜）— 落子方围住对方 → 落子方胜
-// 4. 对手围子胜 — 对手因落子方的这步棋而完成围子（如白走入黑的包围圈）→ 对手胜
-// 5. 继续
+// 主判定入口：每次落子后按以下顺序检测
+// 1. 将新棋子写入棋盘（由调用方在调用前完成）
+// 2. 规则三（自包围判负）— 落子方自包围 → 落子方负
+// 3. 规则四（连续两排判负）— 落子方双排 → 落子方负
+// 4. 新落子被对方围住 — 优先于「落子方围住对方」判断（如白走入黑的包围圈）→ 对手胜
+// 5. 规则一/二（围子胜）— 落子方围住对方 → 落子方胜
+// 6. 无结果 → 继续（由调用方切换回合）
+//
+// 胜负归属严格依据棋盘上的实际包围关系，绝不简单等同于「当前落子方」。
+// 第 4 步必须优先于第 5 步：即使落子方本步也围住了对方棋子，
+// 只要落子方的新棋子立即被对方围住，仍以对方为获胜方。
 function evaluateMove(board, lastR, lastC, player) {
-  // 1~3: 落子方自身的胜负判定
+  // 2: 规则三（自包围判负）— 落子方自包围 → 落子方负
   if (checkSelfSurroundLoss(board, player)) {
     return { gameOver: true, winner: opponent(player), reason: '八方全占（自包围）', rule: 3 };
   }
+  // 3: 规则四（连续两排判负）— 落子方双排 → 落子方负
   const rowResult = checkConsecutiveRowsLoss(board, player);
   if (rowResult) {
     var dirText;
@@ -307,43 +326,48 @@ function evaluateMove(board, lastR, lastC, player) {
     else dirText = '相邻斜行';
     return { gameOver: true, winner: opponent(player), reason: dirText + '连续超过三颗', rule: 4 };
   }
+
+  // 4: 新落下的棋子立即被对方围住 → 对手胜（优先于第 5 步）
+  if (lastR !== null && lastR !== undefined && lastC !== null && lastC !== undefined) {
+    const opp = opponent(player);
+    const oppOrtho = collectSurroundStones(board, lastR, lastC, ORTHO, opp);
+    const oppDiag = collectSurroundStones(board, lastR, lastC, DIAG, opp);
+    if (oppOrtho || oppDiag) {
+      const size = board.length;
+      const onEdge = (lastR === 0 || lastR === size - 1 || lastC === 0 || lastC === size - 1);
+      const reason = oppOrtho ? (onEdge ? '边缘十字围' : '十字围')
+                               : (onEdge ? '边缘斜角围' : '斜角围');
+      return {
+        gameOver: true,
+        winner: opp,
+        reason: reason,
+        rule: oppOrtho ? 1 : 2,
+        winTarget: { r: lastR, c: lastC },
+        winStones: oppOrtho ? oppOrtho : oppDiag
+      };
+    }
+  }
+
+  // 5: 规则一/二（围子胜）— 落子方围住对方 → 落子方胜
   const win = checkSurroundWin(board, player);
   if (win) {
-    var size = board.length;
-    var onEdge = (win.target.r === 0 || win.target.r === size - 1 ||
-                  win.target.c === 0 || win.target.c === size - 1);
-    var reason;
-    if (win.orthogonal) reason = onEdge ? '边缘十字围' : '十字围';
-    else reason = onEdge ? '边缘斜角围' : '斜角围';
+    var size2 = board.length;
+    var onEdge2 = (win.target.r === 0 || win.target.r === size2 - 1 ||
+                   win.target.c === 0 || win.target.c === size2 - 1);
+    var reason2;
+    if (win.orthogonal) reason2 = onEdge2 ? '边缘十字围' : '十字围';
+    else reason2 = onEdge2 ? '边缘斜角围' : '斜角围';
     return {
       gameOver: true,
       winner: player,
-      reason: reason,
+      reason: reason2,
       rule: win.orthogonal ? 1 : 2,
       winTarget: win.target,
       winStones: win.stones
     };
   }
 
-  // 4: 对手的围子胜 — 落子方的棋子可能补齐了对手的包围圈
-  const oppWin = checkSurroundWin(board, opponent(player));
-  if (oppWin) {
-    var oppSize = board.length;
-    var oppOnEdge = (oppWin.target.r === 0 || oppWin.target.r === oppSize - 1 ||
-                      oppWin.target.c === 0 || oppWin.target.c === oppSize - 1);
-    var oppReason;
-    if (oppWin.orthogonal) oppReason = oppOnEdge ? '边缘十字围' : '十字围';
-    else oppReason = oppOnEdge ? '边缘斜角围' : '斜角围';
-    return {
-      gameOver: true,
-      winner: opponent(player),
-      reason: oppReason,
-      rule: oppWin.orthogonal ? 1 : 2,
-      winTarget: oppWin.target,
-      winStones: oppWin.stones
-    };
-  }
-
+  // 6: 无结果
   return { gameOver: false };
 }
 
@@ -361,6 +385,7 @@ module.exports = {
   opponent: opponent,
   inBounds: inBounds,
   canPlace: canPlace,
+  chooseRandomMove: chooseRandomMove,
   placePiece: placePiece,
   starPoints: starPoints,
   evaluateMove: evaluateMove,

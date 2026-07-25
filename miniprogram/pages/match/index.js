@@ -12,6 +12,9 @@ function getMatchRangeText(waitingTime) {
   return '全部段位';
 }
 
+// 超时匹配阈值（秒）：超过仍未匹配到真人 → 自动分配 AI 对手
+const AI_MATCH_TIMEOUT_SEC = 30;
+
 Page({
   data: {
     matched: false,
@@ -21,6 +24,10 @@ Page({
     myColor: 'black',
     countdown: 3,
     gameId: null,
+    aiMatching: false,
+    aiColor: '',
+    aiLevel: '',
+    canceled: false,
     matchTimer: null,
     countdownTimer: null,
     myRankName: '',
@@ -34,6 +41,7 @@ Page({
   },
 
   onUnload: function () {
+    this.data.canceled = true;
     this.clearTimers();
     this.closeWatcher();
     // 页面关闭时若仍在匹配中，取消匹配并标记，返回大厅后不再显示"匹配中"
@@ -53,17 +61,26 @@ Page({
       if (res.result && res.result.code === 200) {
         this.startMatchTimer();
         this.startWatchMatchQueue();
-      } else {
-        const msg = (res.result && res.result.message) || '加入匹配失败';
-        wx.showToast({ title: msg, icon: 'none' });
-        // 若已在队列中，继续监听
-        if (res.result && res.result.code === 400) {
-          this.startMatchTimer();
-          this.startWatchMatchQueue();
-        } else {
-          setTimeout(() => wx.navigateBack(), 1500);
-        }
+        return;
       }
+      const code = res.result && res.result.code;
+      const msg = (res.result && res.result.message) || '加入匹配失败';
+      // “已在匹配队列中” → 仅恢复监听，不报错
+      if (code === 400 && /已在匹配队列/.test(msg)) {
+        this.startMatchTimer();
+        this.startWatchMatchQueue();
+        return;
+      }
+      // “您正在进行游戏 / 已存在进行中的对局” → 自动回到该进行中的对局，而不是假装在搜索
+      if ((code === 400 || code === 409) && res.result.data && res.result.data.gameId) {
+        wx.showToast({ title: '正在返回进行中的对局', icon: 'none' });
+        setTimeout(() => {
+          wx.redirectTo({ url: '/pages/game-online/index?gameId=' + res.result.data.gameId });
+        }, 800);
+        return;
+      }
+      wx.showToast({ title: msg, icon: 'none' });
+      setTimeout(() => wx.navigateBack(), 1500);
     }).catch((err) => {
       this.setData({ joining: false });
       console.error('加入匹配失败:', err);
@@ -84,8 +101,8 @@ Page({
         return;
       }
       if (!matchRecord) {
-        // 队列记录消失（被取消或超时清理）
-        if (!this.data.matched) {
+        // 队列记录消失（被取消 / 超时清理 / 超时转 AI 匹配）
+        if (!this.data.matched && !this.data.aiMatching && !this.data.canceled) {
           wx.showToast({ title: '匹配已结束', icon: 'none' });
           setTimeout(() => wx.navigateBack(), 1200);
         }
@@ -172,7 +189,60 @@ Page({
         waitingTime: t,
         matchRange: getMatchRangeText(t)
       });
+      // 超时仍未匹配到真人 → 自动分配 AI 对手（仅触发一次）
+      if (t >= AI_MATCH_TIMEOUT_SEC && !this.data.matched && !this.data.aiMatching && !this.data.canceled) {
+        this.startAIMatch();
+      }
     }, 1000);
+  },
+
+  // 超时匹配 AI：请求系统分配 AI 模拟用户
+  startAIMatch: function () {
+    if (this.data.matched || this.data.aiMatching || this.data.canceled) return;
+    this.setData({ aiMatching: true });
+    // 停止等待计时（超时后不再等待真人）
+    if (this.data.matchTimer) {
+      clearInterval(this.data.matchTimer);
+      this.data.matchTimer = null;
+    }
+    // 关闭匹配队列监听：createAIMatch 会把队列状态改为 ai_timeout，
+    // 触发 watch 的「记录消失」分支而误返回大厅，必须在请求前先关闭
+    this.closeWatcher();
+    this.setData({ matchRange: 'AI 对手' });
+
+    onlineMatch.createAIMatch().then((res) => {
+      if (this.data.canceled) return; // 期间已取消，放弃进入
+      if (res.result && res.result.code === 200 && res.result.data && res.result.data.game) {
+        const game = res.result.data.game;
+        this.setData({
+          matched: true,
+          aiColor: game.ai_color || '',
+          aiLevel: game.ai_level || '',
+          gameId: game._id
+        });
+        // AI 视为普通对手，直接进入对局
+        this.startGame();
+      } else if (res.result && res.result.code === 409) {
+        // 边界：恰好此时已匹配真人 → 真人优先
+        const gid = res.result.data && res.result.data.gameId;
+        this.setData({ aiMatching: false });
+        if (gid) {
+          this.loadMatchedGame(gid);
+        } else {
+          wx.showToast({ title: '已匹配对手', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 1200);
+        }
+      } else {
+        this.setData({ aiMatching: false });
+        wx.showToast({ title: (res.result && res.result.message) || '匹配失败', icon: 'none' });
+        setTimeout(() => wx.navigateBack(), 1500);
+      }
+    }).catch((err) => {
+      this.setData({ aiMatching: false });
+      console.error('AI 匹配失败:', err);
+      wx.showToast({ title: '网络错误', icon: 'none' });
+      setTimeout(() => wx.navigateBack(), 1500);
+    });
   },
 
   // 倒计时
@@ -203,6 +273,7 @@ Page({
   },
 
   cancelMatch: function () {
+    this.data.canceled = true;
     this.clearTimers();
     this.closeWatcher();
     onlineMatch.cancelMatch().then((res) => {

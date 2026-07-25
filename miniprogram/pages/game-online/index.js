@@ -5,10 +5,30 @@ const rank = require('../../utils/rank.js');
 const onlineMatch = require('../../utils/online-match.js');
 const network = require('../../utils/network.js');
 const sound = require('../../utils/sound.js');
+const ai = require('../../utils/ai.js');
 
 const HEARTBEAT_INTERVAL = 10000; // 10s
 const WIN_HIGHLIGHT_DELAY = 1800; // 1.8s 高亮后再弹结算
-const REMATCH_TIMEOUT = 15000; // 再来一局邀请超时
+const AI_MOVE_DELAY = 200; // AI 落子思考延迟(ms)：仅影响体验/手感，不改变 AI 策略与算路
+const AI_MOVE_MAX_RETRY = 2; // AI 落子失败重试次数（基于最新棋盘重算，不改变策略）
+const TURN_TIMEOUT_MS = 30000; // 每步思考时限(ms)：超时由系统随机落子
+
+// 将云端返回的日期（Date / 字符串 / { $date }）统一转为时间戳
+function parseTs(v) {
+  if (!v) return 0;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return isNaN(t) ? 0 : t;
+  }
+  if (v && v.$date) {
+    const d = v.$date;
+    const t = typeof d === 'number' ? d : Date.parse(d);
+    return isNaN(t) ? 0 : t;
+  }
+  return 0;
+}
 
 Page({
   data: {
@@ -41,21 +61,31 @@ Page({
     showSettlement: false,
     settlement: null,
     // 再来一局
-    rematchSent: false,
-    rematchReceived: null,   // 收到的邀请
-    rematchCountdown: 0,
+    rematchSent: false,        // 已发起真人再来一局邀请，等待对方同意
+    rematchInvitationId: '',   // 我发起的邀请 id（用于监听对方接受）
+    incomingRematch: null,     // 对方发来的再来一局邀请（真人）
+    rematchProcessing: false,  // 再来一局请求处理中（防重复点击）
     // 段位
     myRankName: '',
-    opponentRankName: ''
+    opponentRankName: '',
+    // AI 对手（超时匹配）
+    isAIGame: false,
+    aiColor: '',
+    aiLevel: '',
+    // 思考时限倒计时（剩余秒数，显示用）
+    turnCountdown: 0,
+    // 思考时限倒计时进度百分比（剩余时间占比，显示用，100→0）
+    turnProgress: 100
   },
 
   // 非 data 状态
   watcher: null,
   heartbeatTimer: null,
+  turnTimer: null,        // 思考时限倒计时定时器
+  turnDeadline: 0,        // 当前回合截止时间戳(ms)
+  turnTimeoutFired: false,// 本次回合是否已触发超时落子（防重复触发）
+  _lastMoveTs: 0,         // 上次落子时间，用于判定新回合
   networkUnsub: null,
-  rematchTimer: null,
-  rematchWatcher: null,
-  rematchReceivedTimer: null,
   leaving: false,
   gameLoaded: false,
 
@@ -69,6 +99,7 @@ Page({
 
     // 生成会话 ID（多设备登录用）
     const sessionId = 's_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    this.aiThinking = false;
 
     // 棋盘尺寸
     const sys = wx.getSystemInfoSync();
@@ -86,10 +117,13 @@ Page({
 
     this.loadGame();
     this.subscribeNetwork();
+    this.startTurnTimer();
   },
 
   onUnload: function () {
     this.cleanup();
+    // 退出对局返回大厅时，确保大厅按钮恢复为“开始匹配”（不再残留“匹配中”）
+    if (app.globalData) app.globalData.matchJustCanceled = true;
     // 主动退出且对局仍在进行 → 判负
     if (!this.leaving && this.data.game && this.data.game.status === 'playing' && !this.data.gameOver) {
       // 异步认输，不阻塞退出
@@ -100,11 +134,13 @@ Page({
   onHide: function () {
     // 切后台暂停心跳（小程序后台 watch 也会暂停）
     this.stopHeartbeat();
+    this.stopTurnTimer();
   },
 
   onShow: function () {
     if (this.data.gameId && this.gameLoaded) {
       this.startHeartbeat();
+      this.startTurnTimer();
       // 重连后全量同步一次
       this.loadGame();
     }
@@ -135,7 +171,6 @@ Page({
           this.gameLoaded = true;
           this.startWatchers();
           this.startHeartbeat();
-          this.startRematchWatch();
         }
       } else if (res.result && res.result.code === 409) {
         this.handleMultiDevice();
@@ -151,17 +186,25 @@ Page({
   // 游戏数据加载
   onGameDataLoaded: function (data) {
     const game = data.game;
-    const myOpenid = app.globalData.openid;
 
-    const isBlack = game.black_openid === myOpenid;
-    const isWhite = game.white_openid === myOpenid;
-    if (!isBlack && !isWhite) {
-      wx.showToast({ title: '您不是该游戏的玩家', icon: 'none' });
-      setTimeout(() => wx.navigateBack(), 1500);
-      return;
+    // 身份以服务端 getGameStatus 返回的 myColor 为准（基于真实 openid 推导，
+    // 与 makeMove 的回合校验完全一致）。避免本地 app.globalData.openid 与云端
+    // 不一致时算错 myColor，导致“明明是我的回合”却报“现在不是您的回合”。
+    let myColor = data.myColor;
+    if (!myColor) {
+      const myOpenid = app.globalData.openid;
+      const isBlack = game.black_openid === myOpenid;
+      const isWhite = game.white_openid === myOpenid;
+      if (!isBlack && !isWhite) {
+        wx.showToast({ title: '您不是该游戏的玩家', icon: 'none' });
+        setTimeout(() => wx.navigateBack(), 1500);
+        return;
+      }
+      myColor = isBlack ? 'black' : 'white';
     }
 
-    const myColor = isBlack ? 'black' : 'white';
+    const isBlack = myColor === 'black';
+    const isWhite = myColor === 'white';
     const myInfo = isBlack ? {
       nickname: game.black_nickname, avatar: game.black_avatar
     } : {
@@ -172,6 +215,11 @@ Page({
     } : {
       nickname: game.black_nickname, avatar: game.black_avatar, rankName: game.black_rank_name || ''
     };
+
+    // AI 对手识别（超时匹配分配的 AI 模拟用户，当作普通对手展示）
+    const isAIGame = !!(game.black_is_ai || game.white_is_ai);
+    const aiColor = game.black_is_ai ? 'black' : (game.white_is_ai ? 'white' : '');
+    const aiLevel = game.ai_level || '';
 
     // 待处理悔棋请求
     let pendingUndoRequest = null;
@@ -193,7 +241,10 @@ Page({
       isMyTurn: !gameOver && game.current_player === myColor,
       pendingUndoRequest,
       showUndoRequest: !!pendingUndoRequest,
-      undoUsed
+      undoUsed,
+      isAIGame,
+      aiColor,
+      aiLevel
     });
 
     this.calculateBoardLayout(game.board_size, game.board_state, game.last_move, gameOver ? game.win_stones : null, gameOver ? game.win_target : null);
@@ -210,6 +261,12 @@ Page({
     if (gameOver) {
       this.handleGameOver(game);
     }
+
+    // 刷新思考时限倒计时（以服务端 last_move_time 为基准）
+    this.updateTurnDeadline();
+
+    // 若轮到 AI 落子，由客户端驱动 AI
+    this.maybeTriggerAIMove();
   },
 
   // ===== 棋盘布局 =====
@@ -288,6 +345,35 @@ Page({
         this.loadGame();
       }
     });
+
+    // 监听对手发来的“再来一局”邀请（仅真人局；AI 不会发起邀请）
+    if (!this.data.isAIGame) {
+      onlineMatch.watchInvitations(app.globalData.openid, (err, docs) => {
+        if (err || !docs) return;
+        const inv = (docs || []).find(d => d.game_id === this.data.gameId && d.status === 'pending');
+        if (inv) {
+          this.setData({ incomingRematch: inv });
+        } else if (this.data.incomingRematch) {
+          // 邀请已被处理（接受/拒绝）→ 清除提示
+          this.setData({ incomingRematch: null });
+        }
+      }).then((w) => { this.rematchInvitationWatcher = w; }).catch(() => {});
+    }
+  },
+
+  // 发起方：监听自己发出的邀请，对方接受后进入新对局
+  startRematchWatch: function (invitationId) {
+    if (this.rematchInvWatcher) return;
+    onlineMatch.watchInvitation(invitationId, (err, inv) => {
+      if (err || !inv) return;
+      if (inv.status === 'accepted' && inv.new_game_id) {
+        this.leaving = true;
+        wx.redirectTo({ url: '/pages/game-online/index?gameId=' + inv.new_game_id });
+      } else if (inv.status === 'rejected') {
+        this.setData({ rematchSent: false, rematchInvitationId: '', rematchProcessing: false });
+        wx.showToast({ title: '对方拒绝了再来一局', icon: 'none' });
+      }
+    }).then((w) => { this.rematchInvWatcher = w; }).catch(() => {});
   },
 
   onGameUpdate: function (game) {
@@ -308,12 +394,95 @@ Page({
     if (gameOver && !prevOver) {
       this.handleGameOver(game);
     }
+
+    // 刷新思考时限倒计时（以服务端 last_move_time 为基准）
+    this.updateTurnDeadline();
+
+    // 若轮到 AI 落子，由客户端驱动 AI
+    this.maybeTriggerAIMove();
+  },
+
+  // ===== AI 对手落子驱动 =====
+  // AI 决策在客户端完成（复用 utils/ai.js），通过 onlineMatch.makeAIMove 代理提交，
+  // 服务端以 asAI 标记识别并跳过 session 校验。仅在轮到 AI 且对局进行中触发。
+  // 关键：决策必须在“即将提交”时基于最新棋盘进行，避免 AI_MOVE_DELAY 期间棋盘被
+  // 替换（如 watch 报错触发 loadGame 换盘）导致提交非法/非本回合落子。
+  maybeTriggerAIMove: function () {
+    if (!this.data.isAIGame) return;
+    const game = this.data.game;
+    if (!game || game.status !== 'playing') return;
+    if (game.current_player !== this.data.aiColor) return;
+    if (this.aiThinking) return; // 防止重复触发
+
+    this.aiThinking = true;
+    // 仅安排“思考延迟”，真正决策移到延迟结束后、提交前那一刻
+    setTimeout(() => {
+      this.submitAIMoveWithRetry(0);
+    }, AI_MOVE_DELAY);
+  },
+
+  // 实际提交 AI 落子（带重试）。每次都基于 this.data.game 的最新棋盘重新决策，
+  // 不改变 AI 策略（ai.chooseMove 算路不变），仅保证落子位置合法、回合正确。
+  // 整条重试链保持 aiThinking=true，避免 watch 重新触发产生并发落子。
+  submitAIMoveWithRetry: function (attempt) {
+    if (!this.data.isAIGame) { this.aiThinking = false; return; }
+    const game = this.data.game;
+    if (!game || game.status !== 'playing') { this.aiThinking = false; return; }
+    // 棋盘已推进到人类回合：放弃，等下一次 onGameUpdate 重新触发
+    if (game.current_player !== this.data.aiColor) { this.aiThinking = false; return; }
+
+    const aiPlayer = this.data.aiColor === 'black' ? dango.BLACK : dango.WHITE;
+    const move = ai.chooseMove(game.board_state, aiPlayer, this.data.aiLevel, { lastMove: game.last_move });
+    if (!move) { this.aiThinking = false; return; }
+
+    // 客户端预校验：位置必须可落子，否则基于最新棋盘重试
+    if (!dango.canPlace(game.board_state, move.r, move.c)) {
+      if (attempt < AI_MOVE_MAX_RETRY) {
+        const self = this;
+        setTimeout(() => { self.submitAIMoveWithRetry(attempt + 1); }, 150);
+        return;
+      }
+      this.aiThinking = false;
+      return;
+    }
+
+    const self = this;
+    onlineMatch.makeAIMove(this.data.gameId, move.r, move.c, this.data.aiColor).then((res) => {
+      const code = res.result && res.result.code;
+      if (code === 200 || code === 409) {
+        // 成功，或被 409 状态冲突拦截（由后续 watch 更新接管）
+        this.aiThinking = false;
+        return;
+      }
+      const msg = (res.result && res.result.message) || '';
+      if (code === 400 && (msg.indexOf('回合') >= 0 || msg.indexOf('已结束') >= 0)) {
+        // 棋盘已推进到人类回合/对局结束：放弃，等下一次 onGameUpdate 重新触发，不提示
+        this.aiThinking = false;
+        return;
+      }
+      // 非法位置 / 500 / 其他：基于最新棋盘重试
+      if (attempt < AI_MOVE_MAX_RETRY) {
+        setTimeout(() => { self.submitAIMoveWithRetry(attempt + 1); }, 150);
+        return;
+      }
+      this.aiThinking = false;
+      wx.showToast({ title: 'AI 落子异常，请重试', icon: 'none' });
+    }).catch((err) => {
+      console.error('AI 落子网络错误:', err);
+      if (attempt < AI_MOVE_MAX_RETRY) {
+        setTimeout(() => { self.submitAIMoveWithRetry(attempt + 1); }, 150);
+        return;
+      }
+      this.aiThinking = false;
+      wx.showToast({ title: 'AI 落子异常，请重试', icon: 'none' });
+    });
   },
 
   // ===== 胜利流程 =====
   handleGameOver: function (game) {
-    // 停心跳
+    // 停心跳与思考时限倒计时
     this.stopHeartbeat();
+    this.stopTurnTimer();
 
     const won = game.winner === this.data.myColor;
     const reasonText = this.getWinReasonText(game.winner_reason);
@@ -424,6 +593,67 @@ Page({
     }
   },
 
+  // ===== 思考时限倒计时 =====
+  // 倒计时显示用：以服务端 last_move_time + TURN_TIMEOUT_MS 为权威截止时间，
+  // 归零时由客户端触发一次系统随机落子（服务端会二次校验是否真的超时）。
+  startTurnTimer: function () {
+    if (this.turnTimer) return;
+    const self = this;
+    this.turnTimer = setInterval(() => { self.tickTurnCountdown(); }, 1000);
+  },
+
+  stopTurnTimer: function () {
+    if (this.turnTimer) {
+      clearInterval(this.turnTimer);
+      this.turnTimer = null;
+    }
+  },
+
+  // 根据当前棋局刷新回合截止时间（每次落子/对局加载时调用）
+  updateTurnDeadline: function () {
+    const game = this.data.game;
+    if (!game || game.status !== 'playing') {
+      this.turnDeadline = 0;
+      this.turnTimeoutFired = true; // 非对局中不触发超时落子
+      return;
+    }
+    const ts = parseTs(game.last_move_time);
+    if (ts && ts !== this._lastMoveTs) {
+      this._lastMoveTs = ts;
+      this.turnDeadline = ts + TURN_TIMEOUT_MS;
+      this.turnTimeoutFired = false;
+    }
+  },
+
+  tickTurnCountdown: function () {
+    if (!this.turnDeadline || this.data.gameOver) {
+      if (this.data.turnCountdown !== 0) this.setData({ turnCountdown: 0 });
+      if (this.data.turnProgress !== 0) this.setData({ turnProgress: 0 });
+      return;
+    }
+    const remaining = this.turnDeadline - Date.now();
+    if (remaining <= 0) {
+      this.setData({ turnCountdown: 0, turnProgress: 0 });
+      if (!this.turnTimeoutFired) {
+        this.turnTimeoutFired = true;
+        // 触发系统随机落子；服务端会校验“确实已超时”，若客户端时钟偏快返回 400 则允许下一秒重试
+        onlineMatch.timeoutMove(this.data.gameId).then((res) => {
+          const code = res && res.result && res.result.code;
+          if (code === 400) this.turnTimeoutFired = false;
+        }).catch(() => {});
+      }
+    } else {
+      const secs = Math.ceil(remaining / 1000);
+      let pct = Math.round((remaining / TURN_TIMEOUT_MS) * 100);
+      if (pct > 100) pct = 100;
+      if (pct < 0) pct = 0;
+      const patch = {};
+      if (secs !== this.data.turnCountdown) patch.turnCountdown = secs;
+      if (pct !== this.data.turnProgress) patch.turnProgress = pct;
+      if (Object.keys(patch).length) this.setData(patch);
+    }
+  },
+
   // ===== 落子 =====
   onCellTap: function (e) {
     if (this.data.gameOver || !this.data.isMyTurn || this.data.submitting) return;
@@ -463,6 +693,15 @@ Page({
         // 落子成功，watch 会推送更新；这里无需手动更新
       } else if (res.result && res.result.code === 409) {
         this.handleMultiDevice();
+      } else if (res.result && res.result.code === 400) {
+        const msg = (res.result && res.result.message) || '落子失败';
+        if (msg.indexOf('回合') >= 0) {
+          // 本地回合状态与服务端不一致：以服务端为准重新同步，避免误报“现在不是您的回合”
+          this.loadGame();
+          wx.showToast({ title: '回合已同步，请重试', icon: 'none' });
+        } else {
+          wx.showToast({ title: msg, icon: 'none' });
+        }
       } else {
         wx.showToast({ title: (res.result && res.result.message) || '落子失败', icon: 'none' });
       }
@@ -615,138 +854,6 @@ Page({
     });
   },
 
-  // ===== 再来一局 =====
-  onRematch: function () {
-    if (this.data.rematchSent) return;
-    onlineMatch.inviteRematch(this.data.gameId).then((res) => {
-      if (res.result && res.result.code === 200) {
-        this.setData({ rematchSent: true });
-        wx.showToast({ title: '邀请已发送，等待对方响应', icon: 'none' });
-        // 超时
-        this.rematchTimer = setTimeout(() => {
-          if (this.data.rematchSent) {
-            this.setData({ rematchSent: false });
-            wx.showToast({ title: '对方未响应，可重新匹配', icon: 'none' });
-          }
-        }, REMATCH_TIMEOUT);
-        // 轮询邀请响应（pending 邀请查不到状态变化，用轮询兜底）
-        this.pollInvitation();
-      } else {
-        wx.showToast({ title: (res.result && res.result.message) || '邀请失败', icon: 'none' });
-      }
-    }).catch(() => {
-      wx.showToast({ title: '网络错误', icon: 'none' });
-    });
-  },
-
-  // 监听对方发来的再来一局邀请
-  startRematchWatch: function () {
-    const openid = app.globalData.openid;
-    if (!openid) return;
-    onlineMatch.watchInvitations(openid, (err, docs) => {
-      if (err || !docs) return;
-      // 只关注与当前对局相关的、对方发来的邀请
-      const incoming = docs.find(d => d.game_id === this.data.gameId && d.to_openid === openid);
-      if (incoming) {
-        this.setData({ rematchReceived: incoming });
-        // 自动超时处理
-        if (this.rematchReceivedTimer) clearTimeout(this.rematchReceivedTimer);
-        this.rematchReceivedTimer = setTimeout(() => {
-          if (this.data.rematchReceived && this.data.rematchReceived._id === incoming._id) {
-            this.setData({ rematchReceived: null });
-          }
-        }, REMATCH_TIMEOUT);
-      }
-    }).then((watcher) => {
-      this.rematchWatcher = watcher;
-    }).catch((err) => {
-      console.error('watch invitations failed', err);
-    });
-  },
-
-  pollInvitation: function () {
-    const db = wx.cloud.database();
-    const openid = app.globalData.openid;
-    let count = 0;
-    const poll = () => {
-      if (!this.data.rematchSent) return;
-      if (count > 15) return; // 最多轮询 15 次（约 15s）
-      count++;
-      db.collection('game_invitations').where({
-        from_openid: openid,
-        game_id: this.data.gameId
-      }).orderBy('created_at', 'desc').limit(1).get().then((res) => {
-        if (res.data && res.data.length > 0) {
-          const inv = res.data[0];
-          if (inv.status === 'accepted' && inv.new_game_id) {
-            // 进入新对局
-            this.setData({ rematchSent: false });
-            if (this.rematchTimer) { clearTimeout(this.rematchTimer); this.rematchTimer = null; }
-            this.resetForNewGame(inv.new_game_id);
-          } else if (inv.status === 'rejected') {
-            this.setData({ rematchSent: false });
-            if (this.rematchTimer) { clearTimeout(this.rematchTimer); this.rematchTimer = null; }
-            wx.showToast({ title: '对方拒绝再来一局', icon: 'none' });
-          } else if (inv.status === 'pending') {
-            setTimeout(poll, 1000);
-          }
-        } else {
-          setTimeout(poll, 1000);
-        }
-      }).catch(() => {
-        setTimeout(poll, 1000);
-      });
-    };
-    poll();
-  },
-
-  // 响应对方发来的再来一局邀请
-  onRespondRematch: function (e) {
-    const accept = e.currentTarget.dataset.accept === 'true';
-    const inv = this.data.rematchReceived;
-    if (!inv) return;
-    onlineMatch.respondRematch(inv._id, accept).then((res) => {
-      if (res.result && res.result.code === 200) {
-        this.setData({ rematchReceived: null });
-        if (accept && res.result.data && res.result.data.gameId) {
-          this.resetForNewGame(res.result.data.gameId);
-        } else if (accept) {
-          // 同意但需查询新 gameId
-          wx.showToast({ title: '已同意', icon: 'success' });
-        } else {
-          wx.showToast({ title: '已拒绝', icon: 'none' });
-        }
-      } else {
-        wx.showToast({ title: (res.result && res.result.message) || '操作失败', icon: 'none' });
-      }
-    }).catch(() => {
-      wx.showToast({ title: '网络错误', icon: 'none' });
-    });
-  },
-
-  // 重置状态进入新对局
-  resetForNewGame: function (newGameId) {
-    this.cleanup();
-    this.gameLoaded = false;
-    this.setData({
-      gameId: newGameId,
-      game: null,
-      gameOver: false,
-      showSettlement: false,
-      settlement: null,
-      rematchSent: false,
-      rematchReceived: null,
-      pendingUndoRequest: null,
-      showUndoRequest: false,
-      undoUsed: false,
-      cells: [],
-      winReasonText: '',
-      isMyTurn: false,
-      submitting: false
-    });
-    this.loadGame();
-  },
-
   // ===== 结算页按钮 =====
   onBackToHome: function () {
     this.leaving = true;
@@ -763,6 +870,66 @@ Page({
     wx.redirectTo({ url: '/pages/match/index' });
   },
 
+  // ===== 再来一局 =====
+  onRematch: function () {
+    if (this.data.rematchSent || this.data.incomingRematch || this.data.rematchProcessing) return;
+    this.setData({ rematchProcessing: true });
+    onlineMatch.inviteRematch(this.data.gameId).then((res) => {
+      this.setData({ rematchProcessing: false });
+      const r = res.result;
+      if (r && r.code === 200 && r.data) {
+        if (r.data.gameId) {
+          // AI 对手：直接开新局
+          wx.showToast({ title: '已开始新对局', icon: 'none' });
+          this.leaving = true;
+          wx.redirectTo({ url: '/pages/game-online/index?gameId=' + r.data.gameId });
+        } else if (r.data._id) {
+          // 真人对手：等待对方同意
+          this.setData({ rematchSent: true, rematchInvitationId: r.data._id });
+          this.startRematchWatch(r.data._id);
+        }
+      } else if (r && r.code === 400 && r.data && r.data._id) {
+        // 已发送过邀请：进入等待
+        this.setData({ rematchSent: true, rematchInvitationId: r.data._id });
+        this.startRematchWatch(r.data._id);
+      } else {
+        wx.showToast({ title: (r && r.message) || '操作失败', icon: 'none' });
+      }
+    }).catch((err) => {
+      this.setData({ rematchProcessing: false });
+      console.error('再来一局失败:', err);
+      wx.showToast({ title: '网络错误', icon: 'none' });
+    });
+  },
+
+  // 同意对手的再来一局邀请
+  onAcceptRematch: function () {
+    const inv = this.data.incomingRematch;
+    if (!inv) return;
+    onlineMatch.respondRematch(inv._id, true).then((res) => {
+      const r = res.result;
+      if (r && r.code === 200 && r.data && r.data.gameId) {
+        this.leaving = true;
+        wx.redirectTo({ url: '/pages/game-online/index?gameId=' + r.data.gameId });
+      } else {
+        wx.showToast({ title: (r && r.message) || '操作失败', icon: 'none' });
+      }
+    }).catch(() => {
+      wx.showToast({ title: '网络错误', icon: 'none' });
+    });
+  },
+
+  // 拒绝对手的再来一局邀请
+  onRejectRematch: function () {
+    const inv = this.data.incomingRematch;
+    if (!inv) return;
+    onlineMatch.respondRematch(inv._id, false).then(() => {
+      this.setData({ incomingRematch: null });
+    }).catch(() => {
+      wx.showToast({ title: '网络错误', icon: 'none' });
+    });
+  },
+
   onCloseSettlement: function () {
     this.setData({ showSettlement: false });
   },
@@ -773,7 +940,9 @@ Page({
 
   // ===== 清理 =====
   cleanup: function () {
+    this.aiThinking = false;
     this.stopHeartbeat();
+    this.stopTurnTimer();
     if (this.watcher) {
       try { this.watcher.close(); } catch (e) {}
       this.watcher = null;
@@ -782,17 +951,13 @@ Page({
       this.networkUnsub();
       this.networkUnsub = null;
     }
-    if (this.rematchTimer) {
-      clearTimeout(this.rematchTimer);
-      this.rematchTimer = null;
+    if (this.rematchInvitationWatcher) {
+      try { this.rematchInvitationWatcher.close(); } catch (e) {}
+      this.rematchInvitationWatcher = null;
     }
-    if (this.rematchWatcher) {
-      try { this.rematchWatcher.close(); } catch (e) {}
-      this.rematchWatcher = null;
-    }
-    if (this.rematchReceivedTimer) {
-      clearTimeout(this.rematchReceivedTimer);
-      this.rematchReceivedTimer = null;
+    if (this.rematchInvWatcher) {
+      try { this.rematchInvWatcher.close(); } catch (e) {}
+      this.rematchInvWatcher = null;
     }
   }
 });

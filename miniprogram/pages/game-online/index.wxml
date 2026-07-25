@@ -33,10 +33,16 @@
   </view>
 
   <!-- 状态栏 -->
-  <view class="status-bar">
+  <view class="status-bar" style="height: 130rpx; display: flex; box-sizing: border-box">
+    <!-- 倒计时徽标：剩余秒数，直观显示30s思考时限 -->
+    <view class="countdown-badge {{turnCountdown <= 10 ? 'countdown-warn' : ''}}" wx:if="{{!gameOver}}">
+      <text class="countdown-num" style="position: relative; left: 0rpx; top: 20rpx">{{turnCountdown}}</text>
+      
+    </view>
+
     <view class="player-indicator">
       <view class="stone-dot {{game.current_player === 'black' ? 'dot-black' : 'dot-white'}}"></view>
-      <text class="status-text" wx:if="{{!gameOver}}">
+      <text class="status-text" wx:if="{{!gameOver}}" style="height: 119rpx; display: block; box-sizing: border-box; width: 142rpx; left: 0rpx; top: 0rpx">
         {{isMyTurn ? '你的回合' : '对手回合'}}
         <text wx:if="{{pendingUndoRequest}}" class="undo-notice"> (有悔棋请求)</text>
       </text>
@@ -44,7 +50,13 @@
         {{game.winner === myColor ? '你胜利了！' : '对手胜利'}}
       </text>
     </view>
+
     <text class="move-count">第 {{game.move_count}} 手</text>
+  </view>
+
+  <!-- 倒计时进度条 -->
+  <view class="countdown-bar-wrap" wx:if="{{!gameOver}}">
+    <view class="countdown-bar {{turnCountdown <= 10 ? 'countdown-bar-warn' : ''}}" style="width: {{turnProgress}}%"></view>
   </view>
 
   <!-- 悔棋请求弹窗 -->
@@ -88,7 +100,7 @@
   </view>
 
   <!-- 结算 overlay -->
-  <view class="settlement-overlay" wx:if="{{showSettlement && settlement}}">
+  <view class="settlement-overlay" wx:if="{{showSettlement && settlement}}" style="position: fixed; left: 0rpx; top: 2rpx">
     <view class="settlement-card">
       <view class="settlement-result {{settlement.won ? 'result-win' : 'result-loss'}}">
         <text class="result-title">{{settlement.won ? '胜利' : '失败'}}</text>
@@ -118,22 +130,19 @@
         </view>
       </view>
       <view class="settlement-buttons">
-        <view class="btn btn-primary settlement-btn" bindtap="onRematch" wx:if="{{!rematchSent}}">再来一局</view>
-        <view class="btn btn-secondary settlement-btn" wx:if="{{rematchSent}}">等待响应...</view>
-        <view class="btn btn-secondary settlement-btn" bindtap="onContinueMatch">继续匹配</view>
-        <view class="btn btn-ghost settlement-btn" bindtap="onBackToLobby">返回大厅</view>
+        <view class="btn btn-primary settlement-btn" wx:if="{{!rematchSent && !incomingRematch}}" bindtap="onRematch" style="width: 635rpx; display: block; box-sizing: border-box">再来一局</view>
+        <view class="btn btn-primary settlement-btn" wx:if="{{rematchSent}}" style="width: 635rpx; display: block; box-sizing: border-box; opacity: 0.6">等待对方同意…</view>
+        <view class="btn btn-primary settlement-btn" bindtap="onContinueMatch" style="width: 635rpx; display: block; box-sizing: border-box">继续匹配</view>
+        <view class="btn btn-ghost settlement-btn" bindtap="onBackToLobby" style="width: 635rpx; display: block; box-sizing: border-box">返回大厅</view>
       </view>
-    </view>
-  </view>
 
-  <!-- 再来一局邀请（对方发来） -->
-  <view class="rematch-invite-overlay" wx:if="{{rematchReceived && !showSettlement}}">
-    <view class="rematch-invite-card">
-      <text class="rematch-invite-title">再来一局？</text>
-      <text class="rematch-invite-msg">对手邀请你再战一局</text>
-      <view class="rematch-invite-buttons">
-        <view class="btn btn-secondary" data-accept="false" bindtap="onRespondRematch">拒绝</view>
-        <view class="btn btn-primary" data-accept="true" bindtap="onRespondRematch">同意</view>
+      <!-- 对手发来的再来一局邀请 -->
+      <view class="rematch-invite" wx:if="{{incomingRematch}}">
+        <text class="rematch-invite-text">对手想再来一局</text>
+        <view class="rematch-invite-btns">
+          <view class="btn btn-primary rematch-invite-btn" bindtap="onAcceptRematch">同意</view>
+          <view class="btn btn-ghost rematch-invite-btn" bindtap="onRejectRematch">拒绝</view>
+        </view>
       </view>
     </view>
   </view>

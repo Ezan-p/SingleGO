@@ -116,9 +116,76 @@
   font-size: 24rpx;
 }
 
+/* 倒计时徽标：圆形，直观显示剩余秒数 */
+.countdown-badge {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 96rpx;
+  height: 96rpx;
+  padding: 0 16rpx;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #F0C478 0%, #C8923C 100%);
+  border: 4rpx solid #E8B870;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.35);
+}
+
+.countdown-num {
+  font-size: 52rpx;
+  font-weight: 800;
+  color: #2A1808;
+  line-height: 1;
+}
+
+.countdown-unit {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #5C3A1E;
+  margin-left: 2rpx;
+}
+
+.countdown-warn {
+  background: radial-gradient(circle at 50% 35%, #ff8a80 0%, #e53935 100%);
+  border-color: #ff5252;
+  box-shadow: 0 4rpx 16rpx rgba(229, 57, 53, 0.5);
+  animation: countdown-pulse 1s ease-in-out infinite;
+}
+
+.countdown-warn .countdown-num,
+.countdown-warn .countdown-unit {
+  color: #fff;
+}
+
+@keyframes countdown-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
 .move-count {
   font-size: 28rpx;
   color: rgba(232, 184, 112, 0.7);
+}
+
+/* 倒计时进度条 */
+.countdown-bar-wrap {
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  margin: -12rpx 4rpx 24rpx;
+}
+
+.countdown-bar {
+  height: 100%;
+  border-radius: 6rpx;
+  background: linear-gradient(to right, #E8B870 0%, #C8923C 100%);
+  transition: width 0.4s linear;
+}
+
+.countdown-bar-warn {
+  background: linear-gradient(to right, #ff8a80 0%, #e53935 100%);
 }
 
 /* 悔棋请求弹窗 */
@@ -439,54 +506,33 @@
   text-align: center;
 }
 
-/* 再来一局邀请 */
-.rematch-invite-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2100;
-}
-
-.rematch-invite-card {
-  background: #fff;
-  border-radius: 20rpx;
-  padding: 50rpx 40rpx;
-  width: 80%;
-  max-width: 560rpx;
+/* 对手发来的再来一局邀请 */
+.rematch-invite {
+  margin-top: 24rpx;
+  padding: 20rpx 24rpx;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 16rpx;
   text-align: center;
 }
 
-.rematch-invite-title {
-  font-size: 38rpx;
-  font-weight: bold;
-  color: #333;
+.rematch-invite-text {
   display: block;
+  font-size: 28rpx;
+  color: #FFE082;
   margin-bottom: 16rpx;
 }
 
-.rematch-invite-msg {
-  font-size: 28rpx;
-  color: #666;
-  display: block;
-  margin-bottom: 36rpx;
-}
-
-.rematch-invite-buttons {
+.rematch-invite-btns {
   display: flex;
+  flex-direction: row;
   gap: 20rpx;
 }
 
-.rematch-invite-buttons .btn {
+.rematch-invite-btn {
   flex: 1;
-  padding: 22rpx 0;
-  border-radius: 12rpx;
-  font-size: 30rpx;
+  padding: 18rpx 0;
+  border-radius: 44rpx;
+  font-size: 28rpx;
 }
 
 /* 按钮通用样式 */

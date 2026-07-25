@@ -73,6 +73,16 @@ function cancelMatch() {
   });
 }
 
+// 超时匹配：请求系统分配 AI 模拟用户（无真人匹配成功时调用）
+function createAIMatch() {
+  return ensureAuth().then(() => {
+    return wx.cloud.callFunction({
+      name: 'matchSystem',
+      data: { $url: 'createAIMatch' }
+    });
+  });
+}
+
 // 获取匹配状态
 function getMatchStatus() {
   return ensureAuth().then(() => {
@@ -89,6 +99,20 @@ function makeMove(gameId, row, col, sessionId) {
   return callGameSync('makeMove', {
     gameId, row, col, sessionId, requestId
   });
+}
+
+// AI 代理落子（带 requestId 幂等）：由人类客户端提交，asAIColor 为目标 AI 颜色
+function makeAIMove(gameId, row, col, aiColor) {
+  const requestId = requestIdUtil.genRequestId();
+  return callGameSync('makeMove', {
+    gameId, row, col, requestId, asAI: true, asAIColor: aiColor
+  });
+}
+
+// 超时系统随机落子：倒计时归零或服务端扫描时调用，由服务端随机落子当前行棋方
+function timeoutMove(gameId) {
+  const requestId = requestIdUtil.genRequestId();
+  return callGameSync('timeoutMove', { gameId, requestId });
 }
 
 // 请求悔棋（带 requestId 幂等）
@@ -253,6 +277,22 @@ function watchInvitations(myOpenid, callback) {
   });
 }
 
+// 监听指定再来一局邀请的状态变化（发起方等待对方接受）
+function watchInvitation(invitationId, callback) {
+  return ensureAuth().then(() => {
+    const database = wx.cloud.database();
+    const watcher = database.collection('game_invitations').doc(invitationId).watch({
+      onChange: (snapshot) => {
+        callback(null, (snapshot.docs && snapshot.docs[0]) || null);
+      },
+      onError: (err) => {
+        callback(err, null);
+      }
+    });
+    return watcher;
+  });
+}
+
 // 监听匹配队列自己的文档
 function watchMatchQueue(myOpenid, callback) {
   return ensureAuth().then(() => {
@@ -313,9 +353,12 @@ module.exports = {
   cancelMatch,
   getMatchStatus,
   getMatchStats,
+  createAIMatch,
 
   // 游戏相关
   makeMove,
+  makeAIMove,
+  timeoutMove,
   requestUndo,
   handleUndoRequest,
   resignGame,
@@ -333,6 +376,7 @@ module.exports = {
   watchUndoRequests,
   watchGameAll,
   watchInvitations,
+  watchInvitation,
   watchMatchQueue,
 
   // 玩家相关

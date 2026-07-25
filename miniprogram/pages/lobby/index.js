@@ -35,13 +35,10 @@ Page({
   onShow: function () {
     this.loadLocalProfile();
     this.syncCloudProfile();
-    // 若用户刚从匹配页取消返回，优先清空本地匹配状态，避免服务端状态同步延迟导致按钮仍显示"匹配中"
-    if (app.globalData.matchJustCanceled) {
-      this.setData({ matching: false });
-      app.globalData.matchJustCanceled = false;
-    } else {
-      this.checkMatchingStatus();
-    }
+    // 回到大厅默认显示“开始匹配”：上一局/上一次匹配残留的“匹配中”状态不保留
+    app.globalData.matchJustCanceled = false;
+    this.setData({ matching: false });
+    this.checkMatchingStatus();
   },
 
   onUnload: function () {
@@ -96,20 +93,22 @@ Page({
     });
   },
 
-  // 检查是否已在匹配队列
+  // 检查是否已在匹配队列（仅用于恢复“进行中”的对局，不再显示“匹配中”）
   checkMatchingStatus: function () {
     onlineMatch.getMatchStatus().then((res) => {
       if (res.result && res.result.code === 200 && res.result.data && res.result.data.match) {
         const m = res.result.data.match;
-        if (m.status === 'waiting') {
-          this.setData({ matching: true });
-        } else if (m.status === 'matched' && m.matched_game_id) {
-          // 已匹配成功，直接进对局
-          this.setData({ matching: false });
-          wx.navigateTo({
-            url: '/pages/game-online/index?gameId=' + m.matched_game_id
-          });
+        if (m.status === 'matched' && m.matched_game_id) {
+          // 仅当对局仍在进行时才自动恢复进入；已结束的对局不重新进入，按钮保持“开始匹配”
+          const game = res.result.data.game;
+          if (game && game.status === 'playing') {
+            this.setData({ matching: false });
+            wx.navigateTo({
+              url: '/pages/game-online/index?gameId=' + m.matched_game_id
+            });
+          }
         }
+        // 'waiting' 或已结束的 'matched'：按钮保持“开始匹配”，不显示“匹配中”
       }
     }).catch(() => {});
   },

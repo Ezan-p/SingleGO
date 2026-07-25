@@ -21,6 +21,7 @@ function makeStore() {
 
   const _ = {
     inc: (v) => ({ __op: 'inc', value: v }),
+    set: (v) => ({ __op: 'set', value: v }),
     gt: (v) => ({ __op: 'gt', value: v }),
     gte: (v) => ({ __op: 'gte', value: v }),
     lt: (v) => ({ __op: 'lt', value: v }),
@@ -61,7 +62,9 @@ function makeStore() {
   function applyUpdate(doc, data) {
     for (const k of Object.keys(data)) {
       const v = data[k];
-      if (v && typeof v === 'object' && v.__op === 'inc') {
+      if (v && typeof v === 'object' && v.__op === 'set') {
+        doc[k] = JSON.parse(JSON.stringify(v.value));
+      } else if (v && typeof v === 'object' && v.__op === 'inc') {
         doc[k] = (doc[k] || 0) + v.value;
       } else {
         doc[k] = JSON.parse(JSON.stringify(v));
@@ -214,6 +217,8 @@ function seedGame(blackOpenid, whiteOpenid, opts = {}) {
     black_nickname: blackOpenid, white_nickname: whiteOpenid,
     black_avatar: '', white_avatar: '',
     black_rank_name: '棋童', white_rank_name: '棋童',
+    black_is_ai: !!opts.blackIsAI, white_is_ai: !!opts.whiteIsAI,
+    ai_level: opts.aiLevel || null, ai_color: opts.aiColor || null, ai_user_id: opts.aiUserId || null,
     start_time: now, end_time: null,
     last_move_time: now,
     last_heartbeat_black: opts.blackHb || now,
@@ -383,6 +388,96 @@ async function run() {
   } else {
     check('客户端 dango.js 存在', false, '未找到 miniprogram/utils/dango.js');
   }
+
+  // ---------- 场景 J：AI 代理落子（asAI）----------
+  console.log('\n[场景 J] 超时匹配 AI：asAI 代理落子 / 回合 / 第三方拒绝 / 无掉线误判');
+  const HUMAN = 'user_human';
+  const AI_USER = 'ai_test_001';
+  seedPlayer(HUMAN, { rankPoints: 0 });
+  // AI 玩家记录（结算时 updatePlayerStats 会更新，缺省也不影响核心流程）
+  store.collections.players = store.collections.players || [];
+  store.collections.players.push({
+    _id: 'player_' + AI_USER, openid: AI_USER, nickname: 'AI棋手', avatar: '',
+    rankPoints: 0, rankName: '棋童', is_ai: true, ai_level: 'normal',
+    total_games: 0, wins: 0, losses: 0, draws: 0, current_streak: 0, best_streak: 0, recent_games: [],
+  });
+  // 人类执黑，AI 执白
+  const gJ = seedGame(HUMAN, AI_USER, {
+    whiteIsAI: true, aiLevel: 'normal', aiColor: 'white', aiUserId: AI_USER,
+  });
+
+  // 人类先落子（黑）
+  const hj1 = await call('makeMove', { gameId: gJ, row: 5, col: 5, requestId: rid(), sessionId: 'sJ' }, HUMAN);
+  check('人类(黑)落子成功 code=200', hj1.code === 200, hj1);
+  check('落子后轮到 AI(白)', getGame(gJ).current_player === 'white', getGame(gJ).current_player);
+
+  // AI 回合：人类客户端代理提交 AI(白) 落子
+  const aiMoveJ = await call('makeMove', { gameId: gJ, row: 5, col: 6, requestId: rid(), asAI: true, asAIColor: 'white' }, HUMAN);
+  check('asAI 代理 AI(白) 落子成功 code=200', aiMoveJ.code === 200, aiMoveJ);
+  check('AI 落子后轮回人类(黑)', getGame(gJ).current_player === 'black', getGame(gJ).current_player);
+  check('AI 落子的 player 标记为 white', aiMoveJ.data && aiMoveJ.data.move && aiMoveJ.data.move.player === 'white', aiMoveJ.data && aiMoveJ.data.move);
+
+  // 非 AI 回合提交 asAI → 拒绝（此时轮到人类黑）
+  const aiOffTurn = await call('makeMove', { gameId: gJ, row: 7, col: 7, requestId: rid(), asAI: true, asAIColor: 'white' }, HUMAN);
+  check('非 AI 回合 asAI 落子被拒 code=400', aiOffTurn.code === 400, aiOffTurn);
+
+  // asAIColor 指定为人类方颜色（非 AI 颜色）：人类身份校验先拦截（403）
+  const aiWrongColor = await call('makeMove', { gameId: gJ, row: 7, col: 7, requestId: rid(), asAI: true, asAIColor: 'black' }, HUMAN);
+  check('asAIColor 指定非 AI 颜色被拒 code=403', aiWrongColor.code === 403, aiWrongColor);
+
+  // 第三方提交 asAI → 拒绝（非对局另一方）
+  const THIRD = 'user_third';
+  const aiThirdParty = await call('makeMove', { gameId: gJ, row: 7, col: 7, requestId: rid(), asAI: true, asAIColor: 'white' }, THIRD);
+  check('第三方代理 asAI 落子被拒 code=403', aiThirdParty.code === 403, aiThirdParty);
+
+  // AI 对手不掉线误判：人类心跳时 AI 的 last_heartbeat 陈旧，但不应判负
+  const gJ2 = seedGame(HUMAN, AI_USER, {
+    whiteIsAI: true, aiLevel: 'normal', aiColor: 'white', aiUserId: AI_USER,
+    whiteHb: new Date(Date.now() - 60000), // 陈旧心跳
+  });
+  const hbJ = await call('heartbeat', { gameId: gJ2, sessionId: 'sJ2' }, HUMAN);
+  check('人类心跳：AI 对手陈旧心跳不误判掉线 gameOver=false', hbJ.data && hbJ.data.gameOver === false, hbJ);
+  const gj2 = getGame(gJ2);
+  check('AI 对手场景下对局仍为 playing', gj2.status === 'playing', gj2.status);
+
+  // ---------- 场景 K：思考时限超时 → 系统随机落子 ----------
+  console.log('\n[场景 K] 思考时限超时：系统随机落子 / 未超时拦截 / 二次防重');
+  // 人类(黑)先手，轮到人类落子但“已超时”
+  const gK = seedGame(HUMAN, 'user_k_white');
+  seedPlayer('user_k_white', { rankPoints: 0 });
+  const gk = getGame(gK);
+  // 模拟人类已思考超过 30s：把 last_move_time 拨到 40s 前
+  gk.last_move_time = new Date(Date.now() - 40000);
+  const beforeStones = gk.board_state.flat().filter((v) => v !== 0).length;
+
+  const toK = await call('timeoutMove', { gameId: gK }, HUMAN);
+  check('超时→系统随机落子 code=200', toK.code === 200, toK);
+  check('系统落子后 move_count=1', getGame(gK).move_count === 1, getGame(gK).move_count);
+  const afterStones = getGame(gK).board_state.flat().filter((v) => v !== 0).length;
+  check('系统落子使棋盘多一颗子', afterStones === beforeStones + 1, { beforeStones, afterStones });
+  check('系统落子为当前行棋方(黑)', toK.data && toK.data.move && toK.data.move.player === 'black', toK.data && toK.data.move);
+  check('系统落子标记 is_timeout=true', toK.data && toK.data.move && toK.data.move.is_timeout === true, toK.data && toK.data.move);
+  check('系统落子后轮回白方', getGame(gK).current_player === 'white', getGame(gK).current_player);
+
+  // 刚落子后 last_move_time 已刷新，立刻再调用应被“尚未超时”拦截
+  const toK2 = await call('timeoutMove', { gameId: gK }, HUMAN);
+  check('落子后立刻调用被“尚未超时”拦截 code=400', toK2.code === 400, toK2);
+
+  // 未超时的对局调用 timeoutMove 应被拦截（last_move_time=now）
+  const gK3 = seedGame(HUMAN, 'user_k3_white');
+  seedPlayer('user_k3_white', { rankPoints: 0 });
+  const toK3 = await call('timeoutMove', { gameId: gK3 }, HUMAN);
+  check('未超时调用被拦截 code=400', toK3.code === 400, toK3);
+
+  // 对手(白)超时：系统应代白方随机落子
+  const gK4 = seedGame('user_k4_black', HUMAN);
+  seedPlayer('user_k4_black', { rankPoints: 0 });
+  const gk4 = getGame(gK4);
+  gk4.current_player = 'white'; // 轮到白(人类)落子
+  gk4.last_move_time = new Date(Date.now() - 40000);
+  const toK4 = await call('timeoutMove', { gameId: gK4 }, HUMAN);
+  check('对手(白)超时→系统代白方随机落子 code=200', toK4.code === 200, toK4);
+  check('系统代白方落子 player=white', toK4.data && toK4.data.move && toK4.data.move.player === 'white', toK4.data && toK4.data.move);
 
   // ============== 汇总 ==============
   console.log(`\n========== 测试结果：通过 ${pass} / 失败 ${fail} ==========`);

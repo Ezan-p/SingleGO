@@ -12,7 +12,6 @@
       <text class="searching-text">正在寻找对手...</text>
       <text class="waiting-time">已等待 {{waitingTime}} 秒</text>
       <text class="my-rank-text">当前段位：{{myRankName}}</text>
-      <text class="match-range-text">匹配范围：{{matchRange}}</text>
       
       <!-- 匹配统计 -->
       <view class="stats" wx:if="{{stats}}">

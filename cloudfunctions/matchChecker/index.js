@@ -162,7 +162,7 @@ async function createGame(player1, player2) {
     status: "playing",
     winner: null,
     winner_reason: null,
-    win_target: null,
+    win_target: { r: null, c: null },
     win_stones: [],
     win_rule: null,
     start_time: db.serverDate(),

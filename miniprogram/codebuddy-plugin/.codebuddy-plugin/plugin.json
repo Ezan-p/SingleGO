@@ -1,0 +1,29 @@
+{
+  "name": "cloudbase",
+  "version": "1.0.0",
+  "description": "Tencent CloudBase — AI models, authentication, NoSQL/MySQL databases, cloud functions, cloud storage, CloudRun backend services, and WeChat Mini Program integration. Powered by cloudbase-mcp.",
+  "author": {
+    "name": "Tencent CloudBase",
+    "url": "https://cloudbase.net"
+  },
+  "homepage": {
+    "url": "https://github.com/TencentCloudBase/cloudbase-ai-toolkit",
+    "type": "github"
+  },
+  "license": "MIT",
+  "keywords": [
+    "cloudbase",
+    "tencent-cloud",
+    "baas",
+    "codebuddy",
+    "ai-model",
+    "database",
+    "cloud-function",
+    "authentication",
+    "storage",
+    "cloudrun"
+  ],
+  "skills": [
+    "./skills/cloudbase"
+  ]
+}

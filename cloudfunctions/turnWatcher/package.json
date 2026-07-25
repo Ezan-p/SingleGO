@@ -1,0 +1,9 @@
+{
+  "name": "turn-watcher",
+  "version": "1.0.0",
+  "description": "单围棋思考时限超时扫描（系统随机落子兜底）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

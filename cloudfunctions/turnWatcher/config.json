@@ -1,0 +1,9 @@
+{
+  "triggers": [
+    {
+      "name": "turnWatcher",
+      "type": "timer",
+      "config": "0 */1 * * * * *"
+    }
+  ]
+}
