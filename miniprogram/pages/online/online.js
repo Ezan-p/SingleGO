@@ -5,12 +5,16 @@ const rank = require('../../utils/rank.js');
 const sound = require('../../utils/sound.js');
 const app = getApp();
 
+// 每步思考时限(ms)：超时由本端随机落子（好友对战为纯客户端逻辑，仅当前行棋方客户端触发）
+const TURN_TIMEOUT_MS = 30000;
+
 Page({
   data: {
     docId: '',
     boardSize: dango.DEFAULT_SIZE,
     currentPlayer: dango.BLACK,
     gameOver: false,
+    playing: false,
     winner: 0,
     winReason: '',
     moveCount: 0,
@@ -25,7 +29,11 @@ Page({
     gridPx: 0,
     cells: [],
     myRankName: '',
-    pendingColor: 0 // 预览落子颜色（1=黑, 2=白），两下落子交互
+    pendingColor: 0, // 预览落子颜色（1=黑, 2=白），两下落子交互
+    // 思考时限倒计时（剩余秒数，显示用）
+    turnCountdown: 0,
+    // 思考时限倒计时进度百分比（剩余时间占比，显示用，100→0）
+    turnProgress: 100
   },
 
   // 非响应式
@@ -36,6 +44,10 @@ Page({
   // this._lastAppliedMove — 回声去重
   // this._endedShown
   // this.pendingCell — 两下落子：当前预览中的交叉点 {r,c}，null 表示无预览
+  // this.turnTimer        — 思考时限倒计时定时器
+  // this.turnDeadline     — 当前回合截止时间戳(ms，本地时钟)
+  // this.turnTimeoutFired — 本次回合是否已触发超时落子（防重复触发）
+  // this._lastMoveCount   — 上次落子数，用于检测新一步并重置倒计时
 
   onLoad: function (options) {
     wx.showShareMenu({ withShareTicket: true, menus: ['shareAppMessage', 'shareTimeline'] });
@@ -58,12 +70,30 @@ Page({
     this.setData({ docId: docId, boardPx: boardPx });
 
     this.watcher = online.subscribeRoom(docId, this.onRoomChange.bind(this));
+
+    // 思考时限倒计时状态初始化
+    this.turnDeadline = 0;
+    this.turnTimeoutFired = false;
+    this._lastMoveCount = undefined;
+    this.startTurnTimer();
   },
 
   onUnload: function () {
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
+    }
+    this.stopTurnTimer();
+  },
+
+  onHide: function () {
+    // 切后台暂停倒计时（避免后台误触发超时落子）
+    this.stopTurnTimer();
+  },
+
+  onShow: function () {
+    if (this.data.docId) {
+      this.startTurnTimer();
     }
   },
 
@@ -126,6 +156,7 @@ Page({
     this.setData({
       currentPlayer: room.currentPlayer,
       gameOver: isEnded,
+      playing: room.status === 'playing',
       winner: room.winner,
       winReason: room.winReason,
       moveCount: (room.moves && room.moves.length) || 0,
@@ -135,6 +166,18 @@ Page({
       isMyTurn: room.status === 'playing' && room.currentPlayer === myColor,
       pendingColor: 0
     });
+
+    // 思考时限：每产生一步（moveCount 变化）重置倒计时；对局结束则清零
+    if (room.status === 'playing' && (this._lastMoveCount === undefined || curMoves !== this._lastMoveCount)) {
+      this._lastMoveCount = curMoves;
+      this.turnDeadline = Date.now() + TURN_TIMEOUT_MS;
+      this.turnTimeoutFired = false;
+    } else if (isEnded) {
+      this._lastMoveCount = curMoves;
+      this.turnDeadline = 0;
+      this.turnTimeoutFired = true;
+      this.setData({ turnCountdown: 0, turnProgress: 0 });
+    }
 
     if (isEnded && !this._endedShown) {
       this._endedShown = true;
@@ -210,6 +253,66 @@ Page({
       .catch(function (err) {
         self._placing = false; // 失败则解锁，允许重试
         wx.showToast({ title: (err && err.message) || '落子失败', icon: 'none', duration: 800 });
+      });
+  },
+
+  // ===== 思考时限倒计时（好友对战，纯客户端）=====
+  // 以“每次落子”为重置点（本地时钟，避免双端时钟偏差），轮到对方时亦显示对方剩余时间。
+  // 仅当前行棋方客户端在归零时触发随机落子；回合同时只有一方行棋，自然避免双端重复落子。
+  startTurnTimer: function () {
+    if (this.turnTimer) return;
+    const self = this;
+    this.turnTimer = setInterval(function () { self.tickTurnCountdown(); }, 1000);
+  },
+
+  stopTurnTimer: function () {
+    if (this.turnTimer) {
+      clearInterval(this.turnTimer);
+      this.turnTimer = null;
+    }
+  },
+
+  tickTurnCountdown: function () {
+    if (!this.turnDeadline || this.data.gameOver) {
+      if (this.data.turnCountdown !== 0) this.setData({ turnCountdown: 0 });
+      if (this.data.turnProgress !== 0) this.setData({ turnProgress: 0 });
+      return;
+    }
+    const remaining = this.turnDeadline - Date.now();
+    if (remaining <= 0) {
+      this.setData({ turnCountdown: 0, turnProgress: 0 });
+      // 仅当前行棋方且未在落子提交中时触发随机落子
+      if (!this.turnTimeoutFired && this.data.isMyTurn && !this._placing) {
+        this.turnTimeoutFired = true;
+        this.doTimeoutRandomMove();
+      }
+    } else {
+      const secs = Math.ceil(remaining / 1000);
+      let pct = Math.round((remaining / TURN_TIMEOUT_MS) * 100);
+      if (pct > 100) pct = 100;
+      if (pct < 0) pct = 0;
+      const patch = {};
+      if (secs !== this.data.turnCountdown) patch.turnCountdown = secs;
+      if (pct !== this.data.turnProgress) patch.turnProgress = pct;
+      if (Object.keys(patch).length) this.setData(patch);
+    }
+  },
+
+  // 超时由本端随机落子（系统随机落子），提交时标记 isTimeout
+  doTimeoutRandomMove: function () {
+    const self = this;
+    if (!this.board || this._placing) { this.turnTimeoutFired = false; return; }
+    const move = dango.chooseRandomMove(this.board, this.data.myColor);
+    if (!move) { this.turnTimeoutFired = false; return; } // 棋盘已满等极端情况：下一秒重试
+    this._placing = true;
+    online.placeMove(this.data.docId, { r: move.r, c: move.c, player: this.data.myColor, isTimeout: true })
+      .then(function () {
+        wx.showToast({ title: '超时·系统随机落子', icon: 'none', duration: 1200 });
+      })
+      .catch(function (err) {
+        self._placing = false;
+        self.turnTimeoutFired = false; // 允许下次重试
+        wx.showToast({ title: (err && err.message) || '超时落子失败', icon: 'none', duration: 1000 });
       });
   },
 

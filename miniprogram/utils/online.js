@@ -128,10 +128,10 @@ function placeMove(roomDocId, move) {
     const update = {
       board: board,
       currentPlayer: result.gameOver ? player : next,
-      lastMove: { r: r, c: c },
+      lastMove: { r: r, c: c, isTimeout: !!move.isTimeout },
       lastMoveBy: getApp().globalData.openid,
       updatedAt: db().serverDate(),
-      moves: cmd().push({ r: r, c: c, player: player, ts: Date.now() })
+      moves: cmd().push({ r: r, c: c, player: player, ts: Date.now(), isTimeout: !!move.isTimeout })
     };
     if (result.gameOver) {
       update.status = 'ended';

@@ -455,7 +455,10 @@ async function applyMove(game, myColor, row, col, requestId, opts) {
     board_state: newBoard,
     current_player: myColor === 'black' ? 'white' : 'black',
     move_count: game.move_count + 1,
-    last_move: { row, col, player: myColor },
+    // 注意：games 文档初始 last_move 为 null，CloudBase 的 update 会对对象做字段级合并，
+    // 直接传对象会导致 MongoDB 报错“Cannot create field 'col' in element {last_move: null}”。
+    // 使用 _.set() 整体替换该字段。
+    last_move: _.set({ row, col, player: myColor }),
     last_move_time: db.serverDate(),
     [`last_heartbeat_${myColor}`]: db.serverDate(),
     updated_at: db.serverDate()

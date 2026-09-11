@@ -102,10 +102,21 @@ Page({
       }
       if (!matchRecord) {
         // 队列记录消失（被取消 / 超时清理 / 超时转 AI 匹配）
-        if (!this.data.matched && !this.data.aiMatching && !this.data.canceled) {
+        // 注意：joinMatch 会先清理残留记录再新建等待记录，期间可能出现一次空的瞬时快照，
+        // 因此这里用 getMatchStatus 重新确认，避免误判“匹配已结束”而返回大厅。
+        if (this.data.matched || this.data.aiMatching || this.data.canceled) return;
+        onlineMatch.getMatchStatus().then((res) => {
+          if (this.data.matched || this.data.aiMatching || this.data.canceled) return;
+          const stillInQueue = res.result && res.result.code === 200 &&
+            res.result.data && res.result.data.match;
+          if (stillInQueue) return; // 仍在队列中，忽略这次空快照
           wx.showToast({ title: '匹配已结束', icon: 'none' });
           setTimeout(() => wx.navigateBack(), 1200);
-        }
+        }).catch(() => {
+          if (this.data.matched || this.data.aiMatching || this.data.canceled) return;
+          wx.showToast({ title: '匹配已结束', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 1200);
+        });
         return;
       }
       if (matchRecord.status === 'matched' && matchRecord.matched_game_id) {
@@ -143,11 +154,18 @@ Page({
 
   // 加载匹配成功的游戏
   loadMatchedGame: function (gameId) {
+    if (this.data.matched || this.data.aiMatching) return; // 已进入对局则忽略
     const db = wx.cloud.database();
     db.collection('games').doc(gameId).get().then((res) => {
-      if (res.data) {
-        this.onMatchSuccess(res.data);
+      const game = res.data;
+      if (!game) return;
+      // 防御：匹配记录可能指向已结束的对局（如上局对手掉线的残留 matched 记录）。
+      // 已结束的对局不能进入，否则会直接显示“对手掉线”。停留匹配页继续等待真人匹配。
+      if (game.status !== 'playing') {
+        console.warn('匹配记录指向已结束的对局，忽略并继续匹配', gameId, game.status);
+        return;
       }
+      this.onMatchSuccess(game);
     }).catch((err) => {
       console.error('加载游戏失败', err);
     });

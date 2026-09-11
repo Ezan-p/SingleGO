@@ -84,7 +84,10 @@ Page({
   turnTimer: null,        // 思考时限倒计时定时器
   turnDeadline: 0,        // 当前回合截止时间戳(ms)
   turnTimeoutFired: false,// 本次回合是否已触发超时落子（防重复触发）
-  _lastMoveTs: 0,         // 上次落子时间，用于判定新回合
+  _lastMoveCount: undefined, // 上次落子步数，用于判定“进入新回合”并重置倒计时
+  _aiWatchdog: null,      // AI 落子看门狗定时器（持久，落子成功后才清除）
+  _aiSubmitTimer: null,   // AI 落子重试定时器
+  _aiTurnStartMoveCount: 0, // 触发 AI 落子时的手数，看门狗据此判断是否真正落子
   networkUnsub: null,
   leaving: false,
   gameLoaded: false,
@@ -100,6 +103,8 @@ Page({
     // 生成会话 ID（多设备登录用）
     const sessionId = 's_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
     this.aiThinking = false;
+    this._lastMoveCount = undefined; // 新对局：重置回合计步，保证首步即开始完整 30s
+    this._onlineStatsRecorded = false; // 新对局：允许重新累计战绩
 
     // 棋盘尺寸
     const sys = wx.getSystemInfoSync();
@@ -265,6 +270,10 @@ Page({
     // 刷新思考时限倒计时（以服务端 last_move_time 为基准）
     this.updateTurnDeadline();
 
+    // 防御：当前不是 AI 回合时，彻底停止 AI 落子循环（清除思考锁 / 看门狗 / 重试定时器），
+    // 避免某次 AI 落子异常后，后续所有 AI 回合被卡死，导致“玩家落子后 AI 不落子”。
+    if (game.current_player !== this.data.aiColor) this._stopAIMoveLoop();
+
     // 若轮到 AI 落子，由客户端驱动 AI
     this.maybeTriggerAIMove();
   },
@@ -398,8 +407,27 @@ Page({
     // 刷新思考时限倒计时（以服务端 last_move_time 为基准）
     this.updateTurnDeadline();
 
+    // 防御：当前不是 AI 回合时，彻底停止 AI 落子循环（清除思考锁 / 看门狗 / 重试定时器），
+    // 避免某次 AI 落子异常后，后续所有 AI 回合被卡死，导致“玩家落子后 AI 不落子”。
+    if (game.current_player !== this.data.aiColor) this._stopAIMoveLoop();
+
     // 若轮到 AI 落子，由客户端驱动 AI
     this.maybeTriggerAIMove();
+  },
+
+  // AI 思考锁软复位：清除思考标志与“重试定时器”，但【保留看门狗】。
+  // 用于某次落子尝试失败时，让看门狗继续在数秒后重触发，保证 AI 永不卡死。
+  _resetAiThinking: function () {
+    this.aiThinking = false;
+    if (this._aiSubmitTimer) { clearTimeout(this._aiSubmitTimer); this._aiSubmitTimer = null; }
+  },
+
+  // 彻底停止 AI 落子循环：落子成功 / 对局结束 / 离开对局 / 已非 AI 回合时调用，
+  // 同时清除看门狗与重试定时器。
+  _stopAIMoveLoop: function () {
+    this.aiThinking = false;
+    if (this._aiSubmitTimer) { clearTimeout(this._aiSubmitTimer); this._aiSubmitTimer = null; }
+    if (this._aiWatchdog) { clearTimeout(this._aiWatchdog); this._aiWatchdog = null; }
   },
 
   // ===== AI 对手落子驱动 =====
@@ -412,38 +440,75 @@ Page({
     const game = this.data.game;
     if (!game || game.status !== 'playing') return;
     if (game.current_player !== this.data.aiColor) return;
-    if (this.aiThinking) return; // 防止重复触发
+    if (this.aiThinking) return; // 已在尝试，避免并发落子
+    this._armAIMoveLoop();
+  },
 
+  // 进入一次 AI 落子尝试：置思考锁 + 记录手数 + 安排决策提交 + 武装持久看门狗。
+  _armAIMoveLoop: function () {
     this.aiThinking = true;
+    this._aiTurnStartMoveCount = this.data.game.move_count;
+    const self = this;
     // 仅安排“思考延迟”，真正决策移到延迟结束后、提交前那一刻
-    setTimeout(() => {
-      this.submitAIMoveWithRetry(0);
+    clearTimeout(this._aiSubmitTimer);
+    this._aiSubmitTimer = setTimeout(function () {
+      self.submitAIMoveWithRetry(0);
     }, AI_MOVE_DELAY);
+
+    // 持久看门狗：只要仍是 AI 回合且手数未推进（AI 确实没落下子），就持续重触发，
+    // 不因某次失败而取消。这是“玩家落子后 AI 必定回应”的终极保障；
+    // 即便所有客户端重试都失败，服务端 30s 超时也会随机落子兜底。
+    clearTimeout(this._aiWatchdog);
+    this._aiWatchdog = setTimeout(function () {
+      const g = self.data.game;
+      if (g && g.status === 'playing' && g.current_player === self.data.aiColor
+          && g.move_count === self._aiTurnStartMoveCount) {
+        self.aiThinking = false; // 允许重新进入循环
+        self._armAIMoveLoop();
+      }
+    }, AI_MOVE_DELAY + 3000);
   },
 
   // 实际提交 AI 落子（带重试）。每次都基于 this.data.game 的最新棋盘重新决策，
   // 不改变 AI 策略（ai.chooseMove 算路不变），仅保证落子位置合法、回合正确。
-  // 整条重试链保持 aiThinking=true，避免 watch 重新触发产生并发落子。
+  // 落子成功 → _stopAIMoveLoop（清除看门狗）；失败 → 保留看门狗持续重触发，不弹窗打扰。
+  // 兜底：决策异常或 AI 无着时，退化为随机合法落子，保证 AI 必定回应（不依赖 30s 超时）。
   submitAIMoveWithRetry: function (attempt) {
-    if (!this.data.isAIGame) { this.aiThinking = false; return; }
+    if (!this.data.isAIGame) { this._stopAIMoveLoop(); return; }
     const game = this.data.game;
-    if (!game || game.status !== 'playing') { this.aiThinking = false; return; }
+    if (!game || game.status !== 'playing') { this._stopAIMoveLoop(); return; }
     // 棋盘已推进到人类回合：放弃，等下一次 onGameUpdate 重新触发
-    if (game.current_player !== this.data.aiColor) { this.aiThinking = false; return; }
+    if (game.current_player !== this.data.aiColor) { this._stopAIMoveLoop(); return; }
 
     const aiPlayer = this.data.aiColor === 'black' ? dango.BLACK : dango.WHITE;
-    const move = ai.chooseMove(game.board_state, aiPlayer, this.data.aiLevel, { lastMove: game.last_move });
-    if (!move) { this.aiThinking = false; return; }
+    let move;
+    try {
+      move = ai.chooseMove(game.board_state, aiPlayer, this.data.aiLevel, { lastMove: game.last_move });
+    } catch (e) {
+      // 决策异常绝不应让 aiThinking 永久卡住：退化为随机合法落子，保证 AI 必定回应。
+      console.error('AI 决策异常，退化为随机落子:', e);
+      move = dango.chooseRandomMove(game.board_state, aiPlayer);
+    }
+    if (!move) {
+      // AI 无着（理论上极罕见）→ 随机合法落子兜底，保证必定回应
+      move = dango.chooseRandomMove(game.board_state, aiPlayer);
+    }
+    if (!move) { this._stopAIMoveLoop(); return; } // 棋盘已满等极端情况
 
     // 客户端预校验：位置必须可落子，否则基于最新棋盘重试
     if (!dango.canPlace(game.board_state, move.r, move.c)) {
-      if (attempt < AI_MOVE_MAX_RETRY) {
+      const rand = dango.chooseRandomMove(game.board_state, aiPlayer);
+      if (rand && dango.canPlace(game.board_state, rand.r, rand.c)) {
+        move = rand;
+      } else if (attempt < AI_MOVE_MAX_RETRY) {
         const self = this;
-        setTimeout(() => { self.submitAIMoveWithRetry(attempt + 1); }, 150);
+        clearTimeout(this._aiSubmitTimer);
+        this._aiSubmitTimer = setTimeout(function () { self.submitAIMoveWithRetry(attempt + 1); }, 150);
+        return;
+      } else {
+        this._resetAiThinking(); // 仅复位标志，保留看门狗持续重触发
         return;
       }
-      this.aiThinking = false;
-      return;
     }
 
     const self = this;
@@ -451,30 +516,44 @@ Page({
       const code = res.result && res.result.code;
       if (code === 200 || code === 409) {
         // 成功，或被 409 状态冲突拦截（由后续 watch 更新接管）
-        this.aiThinking = false;
+        // 用服务端权威状态刷新本地回合/倒计时：AI 落子后应立即切回「我的回合」
+        // 并重置 30s 倒计时，避免标签卡在对手回合或倒计时不切换。
+        const updated = res.result && res.result.data && res.result.data.game;
+        if (updated) {
+          self.data.game = updated;
+          self.setData({
+            isMyTurn: !self.data.gameOver && updated.current_player === self.data.myColor
+          });
+          self.updateTurnDeadline();
+        }
+        self._stopAIMoveLoop();
         return;
       }
       const msg = (res.result && res.result.message) || '';
       if (code === 400 && (msg.indexOf('回合') >= 0 || msg.indexOf('已结束') >= 0)) {
-        // 棋盘已推进到人类回合/对局结束：放弃，等下一次 onGameUpdate 重新触发，不提示
-        this.aiThinking = false;
+        // 服务端认为当前不是 AI 回合/对局已结束：可能是状态短暂不同步。
+        // 仅复位思考标志、保留看门狗——若稍后 watch 校正为「确为 AI 回合」，
+        // 看门狗会在数秒后重新武装并落子，避免 AI 在本回合永久沉默（否则只能等 30s 超时）。
+        self._resetAiThinking();
         return;
       }
-      // 非法位置 / 500 / 其他：基于最新棋盘重试
+      // 非法位置 / 500 / 其他：轻量重试一次；重试耗尽则交看门狗在数秒后重触发
       if (attempt < AI_MOVE_MAX_RETRY) {
-        setTimeout(() => { self.submitAIMoveWithRetry(attempt + 1); }, 150);
+        clearTimeout(self._aiSubmitTimer);
+        self._aiSubmitTimer = setTimeout(function () { self.submitAIMoveWithRetry(attempt + 1); }, 150);
         return;
       }
-      this.aiThinking = false;
-      wx.showToast({ title: 'AI 落子异常，请重试', icon: 'none' });
+      console.error('AI 落子失败（看门狗将持续重试）:', code, msg);
+      self._resetAiThinking(); // 仅复位标志，保留看门狗持续重触发
     }).catch((err) => {
       console.error('AI 落子网络错误:', err);
       if (attempt < AI_MOVE_MAX_RETRY) {
-        setTimeout(() => { self.submitAIMoveWithRetry(attempt + 1); }, 150);
+        clearTimeout(self._aiSubmitTimer);
+        self._aiSubmitTimer = setTimeout(function () { self.submitAIMoveWithRetry(attempt + 1); }, 150);
         return;
       }
-      this.aiThinking = false;
-      wx.showToast({ title: 'AI 落子异常，请重试', icon: 'none' });
+      console.error('AI 落子网络错误（看门狗将持续重试）');
+      self._resetAiThinking();
     });
   },
 
@@ -489,10 +568,30 @@ Page({
 
     this.setData({ winReasonText: reasonText });
 
+    // 本地累计联网对战战绩（不依赖云端读取，确保资料页始终有记录）
+    this.recordLocalOnlineStats(won);
+
     // 高亮已由 calculateBoardLayout 设置，延迟后弹结算
     setTimeout(() => {
       this.showSettlement(game, won, reasonText);
     }, WIN_HIGHLIGHT_DELAY);
+  },
+
+  // 本地累计联网对战战绩（与 stats.ai / stats.local 保持一致的本地记账方式）
+  recordLocalOnlineStats: function (won) {
+    if (this._onlineStatsRecorded) return; // 每局仅计一次
+    this._onlineStatsRecorded = true;
+    const profile = app.getPlayerProfile();
+    if (!profile) return;
+    if (!profile.stats) {
+      profile.stats = {
+        online: { total: 0, wins: 0, losses: 0, currentStreak: 0, bestStreak: 0 },
+        ai: { total: 0, wins: 0, losses: 0, currentStreak: 0, bestStreak: 0 },
+        local: { total: 0, wins: 0, losses: 0, currentStreak: 0, bestStreak: 0 }
+      };
+    }
+    rank.updateStats(profile.stats, 'online', won ? 'win' : 'loss');
+    app.updatePlayerProfile(profile);
   },
 
   showSettlement: function (game, won, reasonText) {
@@ -526,7 +625,7 @@ Page({
       }
     });
 
-    // 同步本地段位
+    // 同步本地段位与战绩
     this.syncLocalRank();
   },
 
@@ -610,6 +709,8 @@ Page({
   },
 
   // 根据当前棋局刷新回合截止时间（每次落子/对局加载时调用）
+  // 每位行棋方独立拥有 30s：当 move_count 变化（即轮到新的行棋方落子）时，
+  // 以本地时钟把倒计时重置为完整的 30s，而不是双方共用同一段倒计时。
   updateTurnDeadline: function () {
     const game = this.data.game;
     if (!game || game.status !== 'playing') {
@@ -617,10 +718,10 @@ Page({
       this.turnTimeoutFired = true; // 非对局中不触发超时落子
       return;
     }
-    const ts = parseTs(game.last_move_time);
-    if (ts && ts !== this._lastMoveTs) {
-      this._lastMoveTs = ts;
-      this.turnDeadline = ts + TURN_TIMEOUT_MS;
+    const mc = game.move_count || 0;
+    if (mc !== this._lastMoveCount) {
+      this._lastMoveCount = mc;
+      this.turnDeadline = Date.now() + TURN_TIMEOUT_MS;
       this.turnTimeoutFired = false;
     }
   },
@@ -690,7 +791,27 @@ Page({
     onlineMatch.makeMove(this.data.gameId, r, c, this.data.sessionId).then((res) => {
       this.setData({ submitting: false });
       if (res.result && res.result.code === 200) {
-        // 落子成功，watch 会推送更新；这里无需手动更新
+        // 落子成功：本地立即把行棋方翻转为 AI 并直接驱动 AI 落子，
+        // 不依赖 watch 推送的迟滞（watch 到达后会再次校正棋盘与状态，
+        // aiThinking 锁防止并发落子）。这是“玩家落子后 AI 立即回应”的直接保障。
+        if (this.data.isAIGame && this.data.game) {
+          // 用服务端返回的权威状态覆盖本地，确保 AI 在「已含对方刚落之子」的
+          // 最新 board_state / move_count / current_player 上决策，避免落到旧棋盘导致的
+          // 非法落子与看门狗兜底失效（否则 AI 卡死直到 30s 超时随机落子）。
+          const updated = res.result && res.result.data && res.result.data.game;
+          if (updated) {
+            this.data.game = updated;
+          } else {
+            this.data.game.current_player = this.data.aiColor; // 兜底：至少翻转行棋方
+          }
+          // 立即按权威状态刷新「是否轮到我」与倒计时（不依赖 watch 时序），
+          // 否则 AI 快速应招时回合标签会卡在「我的回合」不切换。
+          this.setData({
+            isMyTurn: !this.data.gameOver && this.data.game.current_player === this.data.myColor
+          });
+          this.updateTurnDeadline();
+          this.maybeTriggerAIMove();
+        }
       } else if (res.result && res.result.code === 409) {
         this.handleMultiDevice();
       } else if (res.result && res.result.code === 400) {
@@ -940,7 +1061,7 @@ Page({
 
   // ===== 清理 =====
   cleanup: function () {
-    this.aiThinking = false;
+    this._stopAIMoveLoop();
     this.stopHeartbeat();
     this.stopTurnTimer();
     if (this.watcher) {

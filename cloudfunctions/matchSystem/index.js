@@ -39,12 +39,15 @@ const RANKS = [
 // ===== AI 模拟用户（超时匹配） =====
 // AI 头像使用微信默认头像
 const AI_DEFAULT_AVATAR = "https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0";
-// AI 昵称池（随机取一个，显示为普通玩家）
-const AI_NICKNAMES = [
-  "棋韵清风", "落子无悔", "玄机妙手", "星河棋客", "淡墨棋盘",
-  "无名高手", "孤影棋仙", "云中落子", "半山听雨", "弈海渔樵",
-  "寒江独钓", "碧落棋缘", "九天揽月", "静水流深", "竹影棋声"
-];
+// AI 昵称池（来自 ai-nicknames.json，随机取一个，显示为普通玩家）
+const AI_NICKNAMES = (() => {
+  try {
+    const names = require("./ai-nicknames.json");
+    return [].concat(names.cn || [], names.en || []);
+  } catch (e) {
+    return ["路过的小棋友", "安静的对手", "神秘棋客"];
+  }
+})();
 // AI 难度按玩家段位档位映射（始终 ≥ normal）
 // beginner(棋童等) → normal；kyu(业余级)/dan(业余段) → hard；master(准大师/大师/宗师/棋圣) → master
 const AI_LEVEL_BY_TIER = {
@@ -200,8 +203,8 @@ exports.createAIMatch = async (event, context) => {
     const aiAdd = await db.collection("players").add({ data: aiPlayerDoc });
     const aiPlayerId = aiAdd._id;
 
-    // 随机分配黑白方
-    const humanIsBlack = Math.random() > 0.5;
+    // AI 对决：固定玩家执黑先手（正常玩家对决的随机分配在真人匹配逻辑中处理，不受影响）
+    const humanIsBlack = true;
     let blackPlayer, whitePlayer, blackIsAI, whiteIsAI, aiColor;
     if (humanIsBlack) {
       blackPlayer = { player_id: player._id, openid: openid, nickname: player.nickname, avatar: player.avatar, rankName: player.rankName || "棋童" };
@@ -361,21 +364,49 @@ exports.joinMatch = async (event, context) => {
   try {
     // 获取玩家信息
     const player = await getPlayerInfo(openid);
-    
-    // 检查玩家是否已经在队列中
+
+    // 清理残留的匹配队列记录，避免同一用户存在多条队列文档导致重复匹配 /
+    // 误入已结束对局（如上一局对手掉线后 matched 记录未清理，再次点击匹配时
+    // watchMatchQueue 取到该残留记录直接跳进已结束的对局并显示“对手掉线”）。
     const queueCheck = await db.collection("match_queue").where({
       openid: openid,
-      status: "waiting"
+      status: _.in(["waiting", "matched"])
     }).get();
-    
-    if (queueCheck.data.length > 0) {
+
+    let activeGameIdFromQueue = null;
+    for (const rec of queueCheck.data) {
+      if (rec.status === "matched" && rec.matched_game_id) {
+        // 残留的 matched 记录：检查对应对局是否仍在进行中
+        let gamePlaying = false;
+        try {
+          const gameRes = await db.collection("games").doc(rec.matched_game_id).get();
+          const game = gameRes.data;
+          gamePlaying = !!game && game.status === "playing";
+        } catch (e) {
+          gamePlaying = false;
+        }
+        if (gamePlaying) {
+          // 对局仍在进行 → 该残留记录有效，记住 gameId 用于后续重入
+          activeGameIdFromQueue = rec.matched_game_id;
+          continue;
+        }
+        // 对局已结束（或无记录）→ 清理该残留 matched 记录
+        await db.collection("match_queue").doc(rec._id).remove().catch(() => {});
+      } else {
+        // 残留的 waiting 记录 → 直接清理（避免重复匹配）
+        await db.collection("match_queue").doc(rec._id).remove().catch(() => {});
+      }
+    }
+
+    // 仍有一个进行中的对局（通过残留 matched 记录定位）→ 直接返回让其重入
+    if (activeGameIdFromQueue) {
       return {
         code: 400,
-        message: "您已经在匹配队列中",
-        data: queueCheck.data[0]
+        message: "您正在进行游戏",
+        data: { gameId: activeGameIdFromQueue }
       };
     }
-    
+
     // 检查玩家是否正在游戏中（自动清理用户已放弃的孤儿对局）
     const { hasActiveGame, activeGameId } = await resolveStaleGames(openid);
     if (hasActiveGame) {

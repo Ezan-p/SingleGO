@@ -6,35 +6,35 @@
       "name": "getOpenId",
       "timeout": 5,
       "envVariables": {},
-      "runtime": "Nodejs16",
+      "runtime": "Nodejs16.13",
       "handler": "index.main"
     },
     {
       "name": "quickstartFunctions",
       "timeout": 5,
       "envVariables": {},
-      "runtime": "Nodejs16",
+      "runtime": "Nodejs16.13",
       "handler": "index.main"
     },
     {
       "name": "matchSystem",
       "timeout": 5,
       "envVariables": {},
-      "runtime": "Nodejs16",
+      "runtime": "Nodejs16.13",
       "handler": "index.main"
     },
     {
       "name": "matchChecker",
       "timeout": 10,
       "envVariables": {},
-      "runtime": "Nodejs16",
+      "runtime": "Nodejs16.13",
       "handler": "index.main"
     },
     {
       "name": "gameSync",
       "timeout": 5,
       "envVariables": {},
-      "runtime": "Nodejs16",
+      "runtime": "Nodejs16.13",
       "handler": "index.main"
     }
   ],

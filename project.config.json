@@ -4,7 +4,8 @@
     "ignore": [],
     "include": []
   },
-  "miniprogramRoot": "miniprogram/",
+  "miniprogramRoot": "game/",
+  "srcMiniprogramRoot": "game/",
   "cloudfunctionRoot": "cloudfunctions/",
   "setting": {
     "urlCheck": true,
@@ -51,7 +52,7 @@
   },
   "compileType": "miniprogram",
   "libVersion": "latest",
-  "projectname": "云开发空白项目",
+  "projectname": "单围棋小游戏",
   "isGameTourist": false,
   "condition": {
     "search": {
@@ -75,5 +76,5 @@
   },
   "simulatorPluginLibVersion": {},
   "editorSetting": {},
-  "appid": "wx566b06fedf15114d"
+  "appid": "wxd247a1e896ff3c5e"
 }

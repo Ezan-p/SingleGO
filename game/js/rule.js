@@ -1,78 +1,18 @@
-// 单围棋 (Dan-Go) 游戏逻辑模块 — 服务端正本
-// KEEP IN SYNC with miniprogram/utils/dango.js
-// 纯 JS 实现，无 wx.* 依赖，便于测试与复用
+// 单围棋 - 胜负规则模块（小游戏版）
+// 从 miniprogram/utils/dango.js 原样迁移，判定逻辑与小程序版完全一致：
+//   规则一 十字围胜（含边缘十字围）
+//   规则二 斜角围胜（含边缘斜角围）
+//   规则三 八方全占（自包围）判负
+//   规则四 连续两排超过三颗判负
+// 纯 JS，无 wx.* 依赖。
 
-// 棋子状态常量
-const EMPTY = 0;
-const BLACK = 1;
-const WHITE = 2;
+const board_ = require('./board.js');
 
-const BOARD_SIZES = [13, 15, 19];
-const DEFAULT_SIZE = 15;
-
-// 方向向量 (dr, dc)
-const ORTHO = [[-1, 0], [0, 1], [1, 0], [0, -1]];        // 北 东 南 西 —— 规则一
-const DIAG  = [[-1, 1], [1, 1], [1, -1], [-1, -1]];      // 东北 东南 西南 西北 —— 规则二
-const ALL8  = ORTHO.concat(DIAG);                         // 规则三
-
-// 创建 size×size 空棋盘
-function createBoard(size) {
-  const board = [];
-  for (let r = 0; r < size; r++) {
-    const row = [];
-    for (let c = 0; c < size; c++) row.push(EMPTY);
-    board.push(row);
-  }
-  return board;
-}
-
-function cloneBoard(board) {
-  return board.map(function (row) { return row.slice(); });
-}
-
-function opponent(player) {
-  return 3 - player;
-}
-
-function inBounds(r, c, size) {
-  return r >= 0 && r < size && c >= 0 && c < size;
-}
-
-function canPlace(board, r, c) {
-  const size = board.length;
-  return inBounds(r, c, size) && board[r][c] === EMPTY;
-}
-
-// 随机选一个合法空点（用于超时系统的随机落子）。无可落子返回 null。
-function chooseRandomMove(board, player) {
-  const size = board.length;
-  const candidates = [];
-  for (let r = 0; r < size; r++) {
-    for (let c = 0; c < size; c++) {
-      if (board[r][c] === EMPTY) candidates.push({ r: r, c: c });
-    }
-  }
-  if (candidates.length === 0) return null;
-  return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
-function placePiece(board, r, c, player) {
-  board[r][c] = player;
-}
-
-// 星位：3 条线的笛卡尔积，13/15/19 均得 9 点
-// 13 -> [3,6,9]; 15 -> [3,7,11]; 19 -> [3,9,15]
-function starPoints(size) {
-  const mid = (size - 1) / 2;
-  const lines = [3, mid, size - 4];
-  const pts = [];
-  for (let i = 0; i < lines.length; i++) {
-    for (let j = 0; j < lines.length; j++) {
-      pts.push([lines[i], lines[j]]);
-    }
-  }
-  return pts;
-}
+const ORTHO = board_.ORTHO;
+const DIAG = board_.DIAG;
+const ALL8 = board_.ALL8;
+const inBounds = board_.inBounds;
+const opponent = board_.opponent;
 
 // 规则三：八方全占判负
 // 当前玩家任意一颗内部棋子的 8 个邻居全部是自己棋子 → 判负
@@ -390,27 +330,11 @@ function evaluateMove(board, lastR, lastC, player) {
 }
 
 module.exports = {
-  EMPTY: EMPTY,
-  BLACK: BLACK,
-  WHITE: WHITE,
-  BOARD_SIZES: BOARD_SIZES,
-  DEFAULT_SIZE: DEFAULT_SIZE,
-  ORTHO: ORTHO,
-  DIAG: DIAG,
-  ALL8: ALL8,
-  createBoard: createBoard,
-  cloneBoard: cloneBoard,
-  opponent: opponent,
-  inBounds: inBounds,
-  canPlace: canPlace,
-  chooseRandomMove: chooseRandomMove,
-  placePiece: placePiece,
-  starPoints: starPoints,
   evaluateMove: evaluateMove,
   checkSelfSurroundLoss: checkSelfSurroundLoss,
   findSelfSurroundStone: findSelfSurroundStone,
   checkConsecutiveRowsLoss: checkConsecutiveRowsLoss,
   checkSurroundWin: checkSurroundWin,
-  allNeighborsAre: allNeighborsAre,
-  collectSurroundStones: collectSurroundStones
+  collectSurroundStones: collectSurroundStones,
+  allNeighborsAre: allNeighborsAre
 };

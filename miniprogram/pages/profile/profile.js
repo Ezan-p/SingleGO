@@ -1,5 +1,6 @@
 const app = getApp();
 const rank = require('../../utils/rank.js');
+const onlineMatch = require('../../utils/online-match.js');
 
 Page({
   data: {
@@ -64,6 +65,35 @@ Page({
       aiStats: profile.stats.ai,
       localStats: profile.stats.local
     });
+
+    // 以云端联网战绩为准，首次进入或返回时刷新（避免本地缓存未计入）
+    this.syncOnlineStats();
+  },
+
+  // 从云端 players 回填联网对战战绩（仅在云端累计更多局时回填，避免覆盖本地已记录的增量）
+  syncOnlineStats: function () {
+    const openid = app.globalData && app.globalData.openid;
+    if (!openid) return;
+    const profile = app.getPlayerProfile();
+    const localTotal = (profile && profile.stats && profile.stats.online && profile.stats.online.total) || 0;
+    onlineMatch.getPlayerStats(openid).then((res) => {
+      if (res && res.data && res.data.length > 0) {
+        const p = res.data[0];
+        const cloudTotal = p.total_games || 0;
+        // 仅当云端累计更多局时，用云端数据回填（历史对局恢复）；否则保留本地记账
+        if (cloudTotal > localTotal) {
+          const online = {
+            total: cloudTotal,
+            wins: p.wins || 0,
+            losses: p.losses || 0,
+            currentStreak: p.current_streak || 0,
+            bestStreak: p.best_streak || 0
+          };
+          app.updateProfileField('stats.online', online);
+          this.setData({ onlineStats: online });
+        }
+      }
+    }).catch(() => {});
   },
 
   onStatsTabTap: function(e) {

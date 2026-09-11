@@ -20,12 +20,20 @@
 
   <!-- 状态栏 -->
   <view class="status-bar">
+    <view class="countdown-badge {{turnCountdown <= 10 ? 'countdown-warn' : ''}}" wx:if="{{playing}}">
+      <text class="countdown-num">{{turnCountdown}}</text>
+    </view>
     <view class="player-indicator">
       <view class="stone-dot {{currentPlayer === 1 ? 'dot-black' : 'dot-white'}}"></view>
       <text class="status-text" wx:if="{{!gameOver}}">{{isMyTurn ? '你的回合' : '对手回合'}}</text>
       <text class="status-text" wx:else>{{winner === myColor ? '你胜' : '对手胜'}}</text>
     </view>
     <text class="move-count">第 {{moveCount}} 手</text>
+  </view>
+
+  <!-- 思考时限进度条 -->
+  <view class="countdown-bar-wrap" wx:if="{{playing}}">
+    <view class="countdown-bar {{turnCountdown <= 10 ? 'countdown-bar-warn' : ''}}" style="width: {{turnProgress}}%"></view>
   </view>
 
   <!-- 棋盘 -->
