@@ -496,6 +496,6 @@ Page({
   },
 
   onShareAppMessage: function () {
-    return { title: '单围棋 - 残局闯关', path: '/pages/index/index' };
+    return { title: '单围棋 - 残局闯关', path: '/pages/index/index', imageUrl: '/images/share-cover.jpg' };
   }
 });

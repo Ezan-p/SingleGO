@@ -235,14 +235,16 @@ Page({
   onShareAppMessage: function () {
     return {
       title: '单围棋·好友对战 ' + this.data.roomId + ' 邀你对局',
-      path: '/pages/room/room?roomId=' + this.data.roomId
+      path: '/pages/room/room?roomId=' + this.data.roomId,
+      imageUrl: '/images/share-cover.jpg'
     };
   },
 
   onShareTimeline: function () {
     return {
       title: '单围棋·好友对战 邀你对局',
-      query: 'roomId=' + this.data.roomId
+      query: 'roomId=' + this.data.roomId,
+      imageUrl: '/images/share-cover.jpg'
     };
   }
 });

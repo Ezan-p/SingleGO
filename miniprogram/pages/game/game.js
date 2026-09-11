@@ -390,7 +390,8 @@ Page({
   onShareAppMessage: function () {
     return {
       title: '单围棋 - 来下一盘吧',
-      path: '/pages/index/index'
+      path: '/pages/index/index',
+      imageUrl: '/images/share-cover.jpg'
     };
   }
 });

@@ -365,7 +365,8 @@ Page({
   onShareAppMessage: function () {
     return {
       title: '单围棋·好友对战 进行中',
-      path: '/pages/online/online?docId=' + this.data.docId
+      path: '/pages/online/online?docId=' + this.data.docId,
+      imageUrl: '/images/share-cover.jpg'
     };
   }
 });

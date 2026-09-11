@@ -566,6 +566,6 @@ Page({
   },
 
   onShareAppMessage: function () {
-    return { title: '单围棋 - 来与AI下一盘吧', path: '/pages/index/index' };
+    return { title: '单围棋 - 来与AI下一盘吧', path: '/pages/index/index', imageUrl: '/images/share-cover.jpg' };
   }
 });

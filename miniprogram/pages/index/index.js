@@ -43,5 +43,13 @@ Page({
   },
   onSettings() {
     wx.navigateTo({ url: '/pages/settings/settings' })
+  },
+
+  onShareAppMessage: function () {
+    return {
+      title: '单围棋 · 一子定胜负',
+      path: '/pages/index/index',
+      imageUrl: '/images/share-cover.jpg'
+    };
   }
 })

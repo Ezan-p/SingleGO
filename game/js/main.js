@@ -213,7 +213,7 @@ function bindLifecycle() {
   }
   if (typeof wx.onShareAppMessage === 'function') {
     wx.onShareAppMessage(function () {
-      return { title: '单围棋 · 一子定胜负', query: '' };
+      return { title: '单围棋 · 一子定胜负', query: '', imageUrl: 'images/share-cover.jpg' };
     });
   }
 }
