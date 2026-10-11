@@ -1,9 +1,11 @@
 <view class="profile-page">
   <!-- 头部信息卡 -->
   <view class="profile-header">
-    <image class="profile-avatar" src="{{avatar}}" bindtap="onEditAvatar" />
+    <button class="avatar-btn" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
+      <image class="profile-avatar" src="{{avatar}}" />
+    </button>
     <view class="profile-name-row">
-      <text class="profile-nickname">{{nickname}}</text>
+      <input class="profile-nickname-input" type="nickname" value="{{nickname}}" placeholder="点击填写微信昵称" placeholder-class="nick-placeholder" focus="{{focusNickname}}" maxlength="12" bindconfirm="onNicknameConfirm" bindblur="onNicknameBlur" />
       <view class="edit-btn" bindtap="onEditNickname">
         <text class="edit-icon">✎</text>
       </view>
@@ -79,11 +81,6 @@
     <view class="data-card">
       <view class="data-row" bindtap="onEditNickname">
         <text class="data-label">修改昵称</text>
-        <text class="data-arrow">›</text>
-      </view>
-      <view class="data-divider"></view>
-      <view class="data-row" bindtap="onEditAvatar">
-        <text class="data-label">修改头像</text>
         <text class="data-arrow">›</text>
       </view>
       <view class="data-divider"></view>

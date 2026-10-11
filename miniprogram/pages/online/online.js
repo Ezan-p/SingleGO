@@ -60,7 +60,8 @@ Page({
     this.myOpenid = getApp().globalData.openid;
     this._lastAppliedMove = null;
     this._endedShown = false;
-    this.setData({ myRankName: rank.getRankName(app.globalData.rankPoints) });
+    const roomId = options && options.roomId;
+    this.setData({ myRankName: rank.getRankName(app.globalData.rankPoints), roomId: roomId || '' });
 
     const sys = wx.getSystemInfoSync();
     const rpxToPx = sys.windowWidth / 750;
@@ -71,6 +72,10 @@ Page({
 
     this.watcher = online.subscribeRoom(docId, this.onRoomChange.bind(this));
 
+    // 轮询兜底：rooms 文档由云函数（服务端）写入、无 _openid，
+    // 在「仅读」权限下 watch 变更推送可能不下发，用云函数读做可靠同步。
+    this.startPolling();
+
     // 思考时限倒计时状态初始化
     this.turnDeadline = 0;
     this.turnTimeoutFired = false;
@@ -79,6 +84,7 @@ Page({
   },
 
   onUnload: function () {
+    this.stopPolling();
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
@@ -103,6 +109,27 @@ Page({
       return;
     }
     this.applyRoom(room);
+  },
+
+  // 定时拉取房间最新状态（走 roomSync 云函数 admin 读，必定可用）
+  startPolling: function () {
+    const self = this;
+    this.stopPolling();
+    if (!this.data.roomId) return; // 仅房号缺失时退回纯 watch
+    const fn = function () {
+      online.getRoomByRoomId(self.data.roomId).then(function (room) {
+        self.applyRoom(room);
+      }).catch(function () { /* 网络抖动忽略，下轮重试 */ });
+    };
+    fn(); // 立即同步一次
+    this.pollTimer = setInterval(fn, 1000);
+  },
+
+  stopPolling: function () {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
   },
 
   applyRoom: function (room) {
@@ -349,6 +376,7 @@ Page({
       success: function (res) {
         if (!res.confirm) return;
         const role = self.data.myColor === dango.BLACK ? 'host' : 'guest';
+        self.stopPolling();
         if (self.watcher) {
           self.watcher.close();
           self.watcher = null;

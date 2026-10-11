@@ -28,6 +28,18 @@
   margin-bottom: 20rpx;
 }
 
+/* 微信头像选择器按钮：清除默认 button 样式 */
+.avatar-btn {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  line-height: normal;
+}
+.avatar-btn::after {
+  border: none;
+}
+
 .profile-name-row {
   display: flex;
   flex-direction: row;
@@ -39,6 +51,18 @@
   font-size: 36rpx;
   font-weight: bold;
   color: #E8B870;
+}
+
+.profile-nickname-input {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #E8B870;
+  min-width: 200rpx;
+}
+.nick-placeholder {
+  font-size: 28rpx;
+  font-weight: normal;
+  color: rgba(232, 184, 112, 0.5);
 }
 
 .edit-btn {

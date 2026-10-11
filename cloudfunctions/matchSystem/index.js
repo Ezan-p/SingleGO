@@ -341,6 +341,104 @@ async function getPlayerInfo(openid) {
   }
 }
 
+// 更新玩家昵称/头像（客户端在进入联网对战/修改资料时调用，
+// 确保对局中显示的昵称与玩家微信名一致；不传则不覆盖）
+exports.updatePlayer = async (event, context) => {
+  const openid = cloud.getWXContext().OPENID;
+  const { nickname, avatar } = event;
+  const res = await db.collection("players").where({ openid }).get();
+  if (res.data.length > 0) {
+    const update = { updated_at: db.serverDate() };
+    if (nickname !== undefined && nickname !== null && nickname !== "") update.nickname = nickname;
+    if (avatar !== undefined && avatar !== null && avatar !== "") update.avatar = avatar;
+    await db.collection("players").doc(res.data[0]._id).update({ data: update });
+    return { code: 200, message: "已更新", data: Object.assign({}, res.data[0], update) };
+  }
+  // 不存在则创建（昵称/头像优先用传入值，否则给默认）
+  const newPlayer = {
+    openid: openid,
+    nickname: nickname || `玩家${Math.random().toString(36).substr(2, 6)}`,
+    avatar: avatar || "https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0",
+    elo_rating: 1200,
+    rankPoints: 0,
+    rankName: "棋童",
+    total_games: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    created_at: db.serverDate(),
+    updated_at: db.serverDate()
+  };
+  const addResult = await db.collection("players").add({ data: newPlayer });
+  return { code: 200, message: "已创建", data: { ...newPlayer, _id: addResult._id } };
+};
+
+// 云端备份玩家档案：将完整的 playerProfile（战绩 stats.online/ai/local、段位、uid 等）
+// 与闯关进度 challengeProgress 写入 players 集合，使删除小程序后重进可恢复，
+// 不再因 wx.setStorageSync 被清空而丢失数据。
+// 同时把 rankPoints/rankName/nickname/avatar 同步到顶层字段，确保匹配/好友对局显示一致。
+exports.saveProfile = async (event, context) => {
+  const openid = cloud.getWXContext().OPENID;
+  const { profile, challengeProgress } = event;
+  if (!profile || typeof profile !== "object") {
+    return { code: 400, message: "缺少 profile", data: null };
+  }
+  try {
+    const res = await db.collection("players").where({ openid }).get();
+    const setData = {
+      profile: profile,
+      rankPoints: profile.rankPoints || 0,
+      rankName: profile.rankName || "棋童",
+      uid: profile.uid || "",
+      nickname: profile.nickname || "",
+      avatar: profile.avatar || "",
+      updated_at: db.serverDate()
+    };
+    if (challengeProgress && typeof challengeProgress === "object") {
+      setData.challengeProgress = challengeProgress;
+    }
+    if (res.data.length > 0) {
+      await db.collection("players").doc(res.data[0]._id).update({ data: setData });
+      return { code: 200, message: "已保存", data: { _id: res.data[0]._id } };
+    }
+    // 兜底：players 文档尚不存在时创建（与 getPlayerInfo 字段尽量对齐）
+    setData.openid = openid;
+    setData.elo_rating = 1200;
+    setData.total_games = 0;
+    setData.wins = 0;
+    setData.losses = 0;
+    setData.draws = 0;
+    setData.created_at = db.serverDate();
+    const add = await db.collection("players").add({ data: setData });
+    return { code: 200, message: "已创建", data: { _id: add._id } };
+  } catch (err) {
+    console.error("[matchSystem.saveProfile] 失败:", err);
+    return { code: 500, message: "保存失败: " + (err.message || err), data: null };
+  }
+};
+
+// 云端读取玩家档案：返回保存的 profile 与 challengeProgress（无则 null）。
+exports.getProfile = async (event, context) => {
+  const openid = cloud.getWXContext().OPENID;
+  try {
+    const res = await db.collection("players").where({ openid }).get();
+    if (res.data.length > 0) {
+      const doc = res.data[0];
+      return {
+        code: 200,
+        data: {
+          profile: doc.profile || null,
+          challengeProgress: doc.challengeProgress || null
+        }
+      };
+    }
+    return { code: 404, message: "未找到云端档案", data: null };
+  } catch (err) {
+    console.error("[matchSystem.getProfile] 失败:", err);
+    return { code: 500, message: "读取失败: " + (err.message || err), data: null };
+  }
+};
+
 // 主分发：根据 event.$url 路由到子函数；无 $url 时默认加入匹配队列
 exports.main = async (event, context) => {
   const action = event.$url || event.action;

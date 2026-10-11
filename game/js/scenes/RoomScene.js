@@ -52,9 +52,33 @@ RoomScene.prototype.onExit = function () {
 };
 
 RoomScene.prototype.closeWatcher = function () {
+  this.stopPolling();
   if (this.watcher) {
     try { this.watcher.close(); } catch (e) {}
     this.watcher = null;
+  }
+};
+
+// 定时拉取房间最新状态（走 roomSync 云函数 admin 读，必定可用）
+// rooms 文档由云函数（服务端）写入、无 _openid，在「仅读」权限下 watch 变更推送可能不下发，
+// 故用轮询做可靠同步兜底。
+RoomScene.prototype.startPolling = function () {
+  const self = this;
+  this.stopPolling();
+  const fn = function () {
+    if (!self.roomId || self.leaving) return;
+    network.getRoomByRoomId(self.roomId).then(function (room) {
+      if (room) self.applyRoom(room);
+    }).catch(function () { /* 网络抖动忽略，下轮重试 */ });
+  };
+  fn(); // 立即同步一次
+  this.pollTimer = setInterval(fn, 1500);
+};
+
+RoomScene.prototype.stopPolling = function () {
+  if (this.pollTimer) {
+    clearInterval(this.pollTimer);
+    this.pollTimer = null;
   }
 };
 
@@ -375,6 +399,9 @@ RoomScene.prototype.startWatch = function (roomDocId) {
     }
     self.applyRoom(room);
   });
+  // 轮询兜底：rooms 文档由云函数（服务端）写入、无 _openid，
+  // 在「仅读」权限下 watch 变更推送可能不下发，用云函数读做可靠同步。
+  self.startPolling();
 };
 
 RoomScene.prototype.applyRoom = function (room) {
@@ -392,7 +419,7 @@ RoomScene.prototype.applyRoom = function (room) {
     this.leaving = true;
     // replace 语义：房间页出栈，进入对局页
     this.manager.stack.pop();
-    this.manager.push('room-game', { docId: room._id });
+    this.manager.push('room-game', { docId: room._id, roomId: room.roomId });
     return;
   }
 

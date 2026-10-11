@@ -22,6 +22,8 @@ Page({
     localStats: { total: 0, wins: 0, losses: 0, currentStreak: 0, bestStreak: 0 },
     // 版本号
     version: 'v1.0.0',
+    // 昵称输入框聚焦（用于点击“修改昵称”时唤起键盘并自动填充微信名）
+    focusNickname: false,
     // 升段动画
     showPromotion: false,
     promotionOldRank: '',
@@ -101,38 +103,39 @@ Page({
   },
 
   onEditNickname: function() {
-    var that = this;
-    wx.showModal({
-      title: '修改昵称',
-      editable: true,
-      placeholderText: '请输入新昵称',
-      content: this.data.nickname === '未设置' ? '' : this.data.nickname,
-      success: function(res) {
-        if (res.confirm && res.content && res.content.trim()) {
-          var newName = res.content.trim().substring(0, 12);
-          that.setData({ nickname: newName });
-          app.updateProfileField('nickname', newName);
-          app.globalData.nickname = newName;
-          wx.showToast({ title: '昵称已更新', icon: 'success' });
-        }
-      }
-    });
+    // 聚焦昵称输入框（input type="nickname" 会弹出微信名自动填充）
+    this.setData({ focusNickname: true });
   },
 
-  onEditAvatar: function() {
-    var that = this;
-    wx.chooseMedia({
-      count: 1,
-      mediaType: ['image'],
-      sourceType: ['album', 'camera'],
-      success: function(res) {
-        var tempUrl = res.tempFiles[0].tempFilePath;
-        that.setData({ avatar: tempUrl });
-        app.updateProfileField('avatar', tempUrl);
-        app.globalData.avatar = tempUrl;
-        wx.showToast({ title: '头像已更新', icon: 'success' });
-      }
-    });
+  // 保存昵称（来自 input type="nickname" 的 confirm / blur）
+  saveNickname: function(value) {
+    var name = (value || '').trim();
+    if (!name) return;
+    name = name.substring(0, 12);
+    this.setData({ nickname: name, focusNickname: false });
+    app.updateProfileField('nickname', name);
+    app.globalData.nickname = name;
+    if (app.syncProfileToCloud) app.syncProfileToCloud();
+    wx.showToast({ title: '昵称已更新', icon: 'success' });
+  },
+
+  onNicknameConfirm: function(e) {
+    this.saveNickname(e.detail.value);
+  },
+
+  onNicknameBlur: function(e) {
+    this.saveNickname(e.detail.value);
+  },
+
+  // 微信头像选择器（button open-type="chooseAvatar"）
+  onChooseAvatar: function(e) {
+    var avatarUrl = e.detail && e.detail.avatarUrl;
+    if (!avatarUrl) return;
+    this.setData({ avatar: avatarUrl });
+    app.updateProfileField('avatar', avatarUrl);
+    app.globalData.avatar = avatarUrl;
+    if (app.syncProfileToCloud) app.syncProfileToCloud();
+    wx.showToast({ title: '头像已更新', icon: 'success' });
   },
 
   onCopyUID: function() {

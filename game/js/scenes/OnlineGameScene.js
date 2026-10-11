@@ -1192,7 +1192,7 @@ OnlineGameScene.prototype.drawTurnBar = function (ctx, vp) {
     label = '你的回合 · ' + this.turnCountdown + 's';
     barColor = this.turnCountdown <= 10 ? ui.COLORS.danger : ui.COLORS.success;
   } else {
-    label = (this.isAIGame ? '对手思考中' : '等待对手落子') + ' · ' + this.turnCountdown + 's';
+    label = '等待对手落子 · ' + this.turnCountdown + 's';
     barColor = ui.COLORS.info;
   }
 

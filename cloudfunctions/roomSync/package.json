@@ -1,0 +1,9 @@
+{
+  "name": "room-sync",
+  "version": "1.0.0",
+  "description": "单围棋好友对战房间同步云函数（管理员权限，绕过 rooms 集合跨用户安全规则）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}

@@ -109,8 +109,17 @@ function boot() {
   // 云开发 + 网络状态
   network.initCloud();
   network.initNetworkStatus();
-  // 提前拉取 openid（失败不阻塞，联网入口会再次触发）
-  network.ensureAuth().catch(function () {});
+  // 提前拉取 openid；成功后：
+  // - 本地档案缺失（如删除小程序后重进）→ 从云端恢复段位战绩与闯关进度
+  // - 之后统一从云端 players 集合同步权威段位，避免名字下方段位分数不显示
+  network.ensureAuth().then(function () {
+    if (!storage.globalData.hadLocalProfile) {
+      return network.restoreProfileFromCloud();
+    }
+    return Promise.resolve();
+  }).then(function () {
+    return network.syncRankFromCloud();
+  }).catch(function () {});
 
   res.loadAll(function (p) { loadingProgress = p; }).then(function () {
     loadingProgress = 1;

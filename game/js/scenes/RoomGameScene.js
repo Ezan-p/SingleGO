@@ -28,6 +28,7 @@ RoomGameScene.prototype.onEnter = function (params) {
   const self = this;
 
   this.docId = p.docId || '';
+  this.roomId = p.roomId || '';
   this.board = null;
   this.boardSize = board_.DEFAULT_SIZE;
   this.layout = null;
@@ -82,6 +83,10 @@ RoomGameScene.prototype.onEnter = function (params) {
   network.db().collection('rooms').doc(this.docId).get().then(function (res) {
     if (res && res.data) self.applyRoom(res.data);
   }).catch(function () {});
+
+  // 轮询兜底：rooms 文档由云函数（服务端）写入、无 _openid，
+  // 在「仅读」权限下 watch 变更推送可能不下发，用 roomSync 云函数读做可靠同步。
+  this.startPolling();
 };
 
 RoomGameScene.prototype.onExit = function () {
@@ -89,9 +94,32 @@ RoomGameScene.prototype.onExit = function () {
 };
 
 RoomGameScene.prototype.closeWatcher = function () {
+  this.stopPolling();
   if (this.watcher) {
     try { this.watcher.close(); } catch (e) {}
     this.watcher = null;
+  }
+};
+
+// 定时拉取房间最新状态（走 roomSync 云函数 admin 读，必定可用）
+RoomGameScene.prototype.startPolling = function () {
+  const self = this;
+  this.stopPolling();
+  if (!this.roomId) return; // 仅 roomId 缺失时退回纯 watch
+  const fn = function () {
+    if (self.leaving) return;
+    network.getRoomByRoomId(self.roomId).then(function (room) {
+      if (room) self.applyRoom(room);
+    }).catch(function () { /* 网络抖动忽略，下轮重试 */ });
+  };
+  fn(); // 立即同步一次
+  this.pollTimer = setInterval(fn, 1000);
+};
+
+RoomGameScene.prototype.stopPolling = function () {
+  if (this.pollTimer) {
+    clearInterval(this.pollTimer);
+    this.pollTimer = null;
   }
 };
 

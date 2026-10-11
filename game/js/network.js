@@ -8,6 +8,7 @@ const storage = require('./storage.js');
 const requestIdUtil = require('./request-id.js');
 const rule = require('./rule.js');
 const board_ = require('./board.js');
+const rank = require('./rank.js');
 const { envId } = require('./env.js');
 
 // ===== 云开发初始化 =====
@@ -67,6 +68,22 @@ function callGameSync(action, data) {
       name: 'gameSync',
       data: Object.assign({ $url: action }, data || {})
     });
+  });
+}
+
+// 好友房间统一调用 roomSync 云函数（服务端以管理员权限执行，绕过 rooms 集合写入权限）
+function callRoomSync(action, data) {
+  return ensureAuth().then(() => {
+    return wx.cloud.callFunction({
+      name: 'roomSync',
+      data: Object.assign({ $url: action }, data || {})
+    });
+  }).then(function (res) {
+    const result = res && res.result;
+    if (!result || result.code !== 200) {
+      throw new Error((result && result.message) || '操作失败');
+    }
+    return result.data;
   });
 }
 
@@ -294,6 +311,84 @@ function updatePlayerInfo(playerInfo) {
   });
 }
 
+// ===== 云端档案与闯关进度备份/恢复 =====
+// 删除小程序后 wx.setStorageSync 会被清空，重进时需从云端恢复，
+// 避免段位战绩与残局闯关进度清零到第一关。
+
+let _backupTimer = null;
+
+// 防抖备份本地玩家档案 + 闯关进度到云端 players 集合。
+// 仅在本地档案已从云端恢复（hadLocalProfile=true）后才允许备份，
+// 否则可能把全零默认档案覆盖到云端，导致真实数据丢失。
+function backupProfileToCloud() {
+  const g = storage.globalData;
+  if (!g.openid) return;
+  if (!g.hadLocalProfile) return;
+  if (_backupTimer) clearTimeout(_backupTimer);
+  _backupTimer = setTimeout(function () {
+    _backupTimer = null;
+    const profile = storage.getPlayerProfile();
+    if (!profile) return;
+    let challengeProgress = null;
+    try { challengeProgress = wx.getStorageSync('dango_challenge_progress') || null; } catch (e) {}
+    wx.cloud.callFunction({
+      name: 'matchSystem',
+      data: {
+        $url: 'saveProfile',
+        openid: g.openid,
+        profile: profile,
+        challengeProgress: challengeProgress
+      }
+    }).catch(function () { /* 忽略备份失败 */ });
+  }, 800);
+}
+
+// 从云端恢复玩家档案与闯关进度（仅当本地档案缺失时调用，例如删除小程序后重进）
+function restoreProfileFromCloud() {
+  const g = storage.globalData;
+  if (!g.openid) return Promise.resolve();
+  return wx.cloud.callFunction({
+    name: 'matchSystem',
+    data: { $url: 'getProfile', openid: g.openid }
+  }).then(function (res) {
+    if (res.result && res.result.code === 200 && res.result.data && res.result.data.profile) {
+      const cloudProfile = res.result.data.profile;
+      cloudProfile.openid = g.openid; // 保留当前 openid
+      if (!cloudProfile.stats) {
+        try { cloudProfile.stats = require('./rank.js').createDefaultProfile().stats; } catch (e) {}
+      }
+      storage.updatePlayerProfile(cloudProfile);
+      if (res.result.data.challengeProgress) {
+        try { wx.setStorageSync('dango_challenge_progress', res.result.data.challengeProgress); } catch (e) {}
+      }
+      console.log('[dango] 已从云端恢复战绩与闯关进度');
+    }
+    g.hadLocalProfile = true; // 恢复完成（或云端无档案）→ 允许后续备份
+  }).catch(function () {
+    g.hadLocalProfile = true; // 恢复失败也标记为已激活，避免阻塞后续备份
+  });
+}
+
+// 从云端 players 集合同步权威段位到 globalData 与本地档案。
+// 启动时调用，避免名字下方的段位分数要等下一局联网才显示
+// （之前只有 OnlineGameScene.syncLocalRank 在联网对局结算后才拉取）。
+function syncRankFromCloud() {
+  const g = storage.globalData;
+  if (!g.openid) return Promise.resolve();
+  return getPlayerStats(g.openid).then(function (res) {
+    if (res && res.data && res.data.length > 0) {
+      const p = res.data[0];
+      const points = p.rankPoints || 0;
+      const name = p.rankName || rank.getRankName(points);
+      storage.updateProfileField('rankPoints', points);
+      storage.updateProfileField('rankName', name);
+      g.rankPoints = points;
+      g.rankName = name;
+    }
+    return res;
+  }).catch(function () { /* 忽略失败，保持本地值 */ });
+}
+
 // ===== 好友房间（由 utils/online.js 迁移） =====
 
 const ROOMS = 'rooms';
@@ -315,127 +410,59 @@ function genUniqueRoomCode() {
   });
 }
 
-// 创建房间：房主=黑
+// 创建房间：房主=黑（走 roomSync 云函数，服务端以管理员权限写入）
 function createRoom(opts) {
   const o = opts || {};
   const boardSize = o.boardSize || board_.DEFAULT_SIZE;
-  return ensureAuth().then(function (g) {
-    return genUniqueRoomCode().then(function (roomId) {
-      const now = db().serverDate();
-      const doc = {
-        roomId: roomId,
-        boardSize: boardSize,
-        host: { openid: g.openid, nickname: o.nickname, avatar: o.avatar },
-        guest: null,
-        status: 'waiting',
-        board: board_.createBoard(boardSize),
-        currentPlayer: board_.BLACK,
-        moves: [],
-        lastMove: null,
-        lastMoveBy: null,
-        winner: 0,
-        winReason: '',
-        createdAt: now,
-        updatedAt: now
-      };
-      return db().collection(ROOMS).add({ data: doc }).then(function (res) {
-        return {
-          _id: res._id, roomId: roomId, boardSize: boardSize,
-          host: doc.host, guest: null, status: 'waiting',
-          board: doc.board, currentPlayer: doc.currentPlayer,
-          moves: [], lastMove: null, lastMoveBy: null, winner: 0, winReason: ''
-        };
-      });
-    });
+  return callRoomSync('createRoom', {
+    boardSize: boardSize,
+    nickname: o.nickname,
+    avatar: o.avatar
+  }).then(function (data) {
+    return {
+      _id: data._id, roomId: data.roomId, boardSize: data.boardSize,
+      host: data.host, guest: data.guest, status: data.status,
+      board: data.board, currentPlayer: data.currentPlayer,
+      moves: data.moves, lastMove: data.lastMove, lastMoveBy: data.lastMoveBy,
+      winner: data.winner, winReason: data.winReason
+    };
   });
 }
 
-// 通过 6 位房号查询房间
+// 通过 6 位房号查询房间（走 roomSync 云函数 admin 读，不受客户端读权限限制）
 function getRoomByRoomId(roomId) {
-  return db().collection(ROOMS).where({ roomId: roomId }).get().then(function (res) {
-    if (!res.data.length) return null;
-    return res.data[0];
-  });
+  return callRoomSync('getRoom', { roomId }).catch(function () { return null; });
 }
 
-// 加入房间：填充 guest=白；仅限 status=waiting 且 guest 为空
+// 加入房间：填充 guest=白（走 roomSync 云函数，服务端以管理员权限写入）
 function joinRoom(opts) {
   const o = opts || {};
-  return ensureAuth().then(function (g) {
-    return db().collection(ROOMS).where({ roomId: o.roomId, status: 'waiting' }).get().then(function (res) {
-      if (!res.data.length) throw new Error('房间不存在或已开始/结束');
-      const room = res.data[0];
-      if (room.guest && room.guest.openid !== g.openid) throw new Error('房间已满');
-      return db().collection(ROOMS).doc(room._id).update({
-        data: {
-          guest: { openid: g.openid, nickname: o.nickname, avatar: o.avatar },
-          updatedAt: db().serverDate()
-        }
-      }).then(function () { return room._id; });
-    });
-  });
+  return callRoomSync('joinRoom', {
+    roomId: o.roomId,
+    nickname: o.nickname,
+    avatar: o.avatar
+  }).then(function (data) { return data._id; });
 }
 
-// 房主开局：status -> playing
+// 房主开局：status -> playing（走 roomSync 云函数）
 function startGame(roomDocId) {
-  return db().collection(ROOMS).doc(roomDocId).update({
-    data: { status: 'playing', updatedAt: db().serverDate() }
-  });
+  return callRoomSync('startGame', { roomDocId: roomDocId });
 }
 
-// 房间内落子：读-校验-写回，全棋盘快照
-// 规则判定复用 rule.evaluateMove（与小程序版 dango.evaluateMove 同一实现，逻辑不变）
+// 房间内落子：读取/校验/写回全部由 roomSync 云函数完成（服务端以管理员权限，
+// 绕过 rooms 集合客户端写入权限；规则判定复用服务端 dango-logic，逻辑不变）。
 function placeMove(roomDocId, move) {
   const r = move.r, c = move.c, player = move.player;
-  return db().collection(ROOMS).doc(roomDocId).get().then(function (res) {
-    const room = res.data;
-    if (!room) throw new Error('房间不存在');
-    if (room.status !== 'playing') throw new Error('对局未在进行中');
-    if (room.currentPlayer !== player) throw new Error('不是你的回合');
-    if (!board_.canPlace(room.board, r, c)) throw new Error('此处已有棋子');
-
-    const board = board_.cloneBoard(room.board);
-    board_.placePiece(board, r, c, player);
-    const result = rule.evaluateMove(board, r, c, player);
-    const next = board_.opponent(player);
-    const update = {
-      board: board,
-      currentPlayer: result.gameOver ? player : next,
-      lastMove: { r: r, c: c, isTimeout: !!move.isTimeout },
-      lastMoveBy: storage.globalData.openid,
-      updatedAt: db().serverDate(),
-      moves: cmd().push({ r: r, c: c, player: player, ts: Date.now(), isTimeout: !!move.isTimeout })
-    };
-    if (result.gameOver) {
-      update.status = 'ended';
-      update.winner = result.winner;
-      update.winReason = result.reason;
-    }
-    return db().collection(ROOMS).doc(roomDocId).update({ data: update });
+  return callRoomSync('placeMove', {
+    roomDocId: roomDocId,
+    r: r, c: c, player: player,
+    isTimeout: !!move.isTimeout
   });
 }
 
-// 离开房间
-// role: 'host' | 'guest'
-// 等待中房主离开 -> 删除房间；进行中离开 -> 判对方胜
+// 离开房间（走 roomSync 云函数，服务端以 openid 推导真实角色，不信任客户端传入 role）
 function leaveRoom(roomDocId, role) {
-  return db().collection(ROOMS).doc(roomDocId).get().then(function (res) {
-    const room = res.data;
-    if (!room) return null;
-    if (room.status === 'waiting' && role === 'host') {
-      return db().collection(ROOMS).doc(roomDocId).remove();
-    }
-    if (room.status === 'ended') return null;
-    const winner = role === 'host' ? board_.WHITE : board_.BLACK;
-    return db().collection(ROOMS).doc(roomDocId).update({
-      data: {
-        status: 'ended',
-        winner: winner,
-        winReason: '对手已离开',
-        updatedAt: db().serverDate()
-      }
-    });
-  });
+  return callRoomSync('leaveRoom', { roomDocId: roomDocId, role: role });
 }
 
 // 实时订阅房间文档，返回 closer
@@ -539,6 +566,9 @@ module.exports = {
   // 玩家
   getPlayerStats,
   updatePlayerInfo,
+  backupProfileToCloud,
+  restoreProfileFromCloud,
+  syncRankFromCloud,
 
   // 好友房间
   genRoomCode,

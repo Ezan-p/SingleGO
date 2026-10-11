@@ -36,6 +36,13 @@
       "envVariables": {},
       "runtime": "Nodejs16.13",
       "handler": "index.main"
+    },
+    {
+      "name": "roomSync",
+      "timeout": 5,
+      "envVariables": {},
+      "runtime": "Nodejs16.13",
+      "handler": "index.main"
     }
   ],
   "ai": {

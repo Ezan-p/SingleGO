@@ -45,6 +45,20 @@ function saveProgress(progress) {
   } catch (e) {
     // 忽略写入失败
   }
+  // 进度变更后（防抖）备份到云端，避免删除小程序后闯关记录丢失
+  notifyCloudBackup();
+}
+
+// 触发云端备份（由 app.backupProfileToCloud 统一处理 playerProfile + 闯关进度）
+function notifyCloudBackup() {
+  try {
+    const app = getApp();
+    if (app && typeof app.backupProfileToCloud === 'function') {
+      app.backupProfileToCloud();
+    }
+  } catch (e) {
+    // getApp 不可用等情况忽略
+  }
 }
 
 function isUnlocked(id) {

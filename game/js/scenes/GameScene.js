@@ -344,7 +344,7 @@ GameScene.prototype.drawStatusBar = function (ctx, vp) {
     statusText = (g.winner === board_.BLACK ? '黑方' : '白方') + '胜 · ' + g.winReason;
     stoneColor = g.winner;
   } else if (g.aiThinking) {
-    statusText = 'AI 思考中…';
+    statusText = '对手回合';
     stoneColor = g.aiPlayer;
   } else {
     const who = (this.mode === 'local')

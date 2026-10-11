@@ -33,6 +33,7 @@ Page({
   },
 
   onUnload: function () {
+    this.stopPolling();
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
@@ -47,32 +48,24 @@ Page({
     this.setData({ inputRoomId: (e.detail.value || '').toUpperCase().trim() });
   },
 
-  // 请求昵称头像授权（拒绝则用兜底昵称）
+  // 请求昵称头像：优先用本地资料（与微信名一致），避免调用已废弃的 wx.getUserProfile
   ensureProfile: function () {
     const self = this;
     return new Promise(function (resolve) {
-      if (self.data.nickname) {
-        resolve({ nickname: self.data.nickname, avatar: self.data.avatar });
+      const app = getApp();
+      const cached = self.data.nickname ||
+        (app.globalData && app.globalData.nickname) ||
+        (app.globalData && app.globalData.playerProfile && app.globalData.playerProfile.nickname);
+      if (cached) {
+        const avatar = (app.globalData && app.globalData.avatar) || self.data.avatar || '';
+        self.setData({ nickname: cached, avatar: avatar });
+        resolve({ nickname: cached, avatar: avatar });
         return;
       }
-      wx.getUserProfile({
-        desc: '用于好友对战展示',
-        success: function (res) {
-          const userInfo = res.userInfo || {};
-          const nickname = userInfo.nickName || '棋手';
-          const avatar = userInfo.avatarUrl || '';
-          self.setData({ nickname: nickname, avatar: avatar });
-          wx.setStorageSync('nickname', nickname);
-          wx.setStorageSync('avatar', avatar);
-          resolve({ nickname: nickname, avatar: avatar });
-        },
-        fail: function () {
-          // 拒绝授权：使用兜底
-          const nickname = '棋手' + Math.floor(Math.random() * 90 + 10);
-          self.setData({ nickname: nickname, avatar: '' });
-          resolve({ nickname: nickname, avatar: '' });
-        }
-      });
+      // 未设置昵称：用兜底名（不再调用已废弃的 wx.getUserProfile，避免显示“微信用户”）
+      const fallback = '棋手' + Math.floor(Math.random() * 90 + 10);
+      self.setData({ nickname: fallback, avatar: '' });
+      resolve({ nickname: fallback, avatar: '' });
     });
   },
 
@@ -156,6 +149,7 @@ Page({
   // ====== 离开 ======
   onLeave: function () {
     const self = this;
+    this.stopPolling();
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
@@ -181,11 +175,12 @@ Page({
     }
     this.watcher = online.subscribeRoom(roomDocId, function (room, err) {
       if (err) {
-        // 房间被删除（房主解散）
+        // 区分「房间被删除」（房主解散）与「无权限/网络错误」，避免误报
+        var msg = (err && err.message) ? err.message : '连接失败';
         if (self.data.mode !== 'home') {
           wx.showModal({
             title: '提示',
-            content: '房间已解散',
+            content: msg.indexOf('已删除') >= 0 ? '房间已解散' : ('连接断开：' + msg),
             showCancel: false,
             confirmText: '返回',
             success: function () {
@@ -197,6 +192,30 @@ Page({
       }
       self.applyRoom(room);
     });
+    // 轮询兜底：rooms 文档由云函数（服务端）写入、无 _openid，
+    // 在「仅读」权限下 watch 的变更推送可能不下发，故用云函数读做可靠同步。
+    this.startPolling();
+  },
+
+  // 定时拉取房间最新状态（走 roomSync 云函数 admin 读，必定可用）
+  startPolling: function () {
+    const self = this;
+    this.stopPolling();
+    const fn = function () {
+      if (self.data.mode === 'home' || !self.data.roomId) return;
+      online.getRoomByRoomId(self.data.roomId).then(function (room) {
+        self.applyRoom(room);
+      }).catch(function () { /* 网络抖动忽略，下轮重试 */ });
+    };
+    fn(); // 立即同步一次
+    this.pollTimer = setInterval(fn, 1500);
+  },
+
+  stopPolling: function () {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
   },
 
   applyRoom: function (room) {
@@ -212,14 +231,18 @@ Page({
     }
     // status=playing：双方跳转到对局页
     if (room.status === 'playing') {
+      if (this._redirecting) return;
+      this._redirecting = true;
+      this.stopPolling();
       if (this.watcher) {
         this.watcher.close();
         this.watcher = null;
       }
-      wx.redirectTo({ url: '/pages/online/online?docId=' + room._id });
+      wx.redirectTo({ url: '/pages/online/online?docId=' + room._id + '&roomId=' + room.roomId });
     }
     // 已结束（对手离开等）
     if (room.status === 'ended' && this.data.mode !== 'home') {
+      this.stopPolling();
       wx.showModal({
         title: '对局已结束',
         content: room.winReason || '已结束',

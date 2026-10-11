@@ -19,7 +19,8 @@ const globalData = {
   rankPoints: 0,
   rankName: '棋童',
   uid: '',
-  playerProfile: null
+  playerProfile: null,
+  hadLocalProfile: false
 };
 
 function safeGet(key, fallback) {
@@ -49,6 +50,7 @@ function initPlayerProfile() {
     globalData.rankName = profile.rankName || rank.getRankName(profile.rankPoints);
     globalData.uid = profile.uid || '';
     globalData.playerProfile = profile;
+    globalData.hadLocalProfile = true;
     if (profile.nickname) globalData.nickname = profile.nickname;
     if (profile.avatar) globalData.avatar = profile.avatar;
   } else {
@@ -59,6 +61,8 @@ function initPlayerProfile() {
     globalData.rankName = '棋童';
     globalData.uid = profile.uid;
     globalData.playerProfile = profile;
+    // 本地档案缺失（如删除小程序后重进），需从云端恢复
+    globalData.hadLocalProfile = false;
   }
   return profile;
 }
@@ -86,6 +90,8 @@ function updateProfileField(field, value) {
   safeSet(KEY_PROFILE, profile);
   if (field === 'rankPoints') globalData.rankPoints = value;
   if (field === 'rankName') globalData.rankName = value;
+  // 每次变更都（防抖）备份到云端，避免删除小程序后数据丢失
+  backupToCloud();
 }
 
 // 覆盖整份档案
@@ -97,6 +103,8 @@ function updatePlayerProfile(profile) {
   if (profile.nickname) globalData.nickname = profile.nickname;
   if (profile.avatar) globalData.avatar = profile.avatar;
   safeSet(KEY_PROFILE, profile);
+  // 每次变更都（防抖）备份到云端，避免删除小程序后数据丢失
+  backupToCloud();
 }
 
 // 更新昵称头像（授权后调用）
@@ -161,6 +169,15 @@ function get(key, fallback) { return safeGet(key, fallback); }
 function set(key, value) { safeSet(key, value); }
 function remove(key) {
   try { wx.removeStorageSync(key); } catch (e) { /* ignore */ }
+}
+
+// 本地档案变更后（防抖）备份到云端，避免删除小程序后数据丢失。
+// 通过 lazy require 调用 network.backupProfileToCloud，避免与 network.js 形成循环依赖。
+function backupToCloud() {
+  try {
+    const net = require('./network.js');
+    if (net && typeof net.backupProfileToCloud === 'function') net.backupProfileToCloud();
+  } catch (e) { /* 模块不可用等情况忽略 */ }
 }
 
 module.exports = {
